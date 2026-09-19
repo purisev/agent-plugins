@@ -1,0 +1,33 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "purisev",
+  "description": "Plugins for coding agents, maintained by purisev.",
+  "owner": {
+    "name": "purisev",
+    "url": "https://github.com/purisev"
+  },
+  "plugins": [
+    {
+      "name": "openviking-memory",
+      "description": "Long-term semantic memory backed by OpenViking: recall on each prompt, capture per turn, commit on session end and before compaction, plus OpenViking's MCP tools.",
+      "source": {
+        "source": "github",
+        "repo": "purisev/openviking-memory"
+      },
+      "homepage": "https://github.com/purisev/openviking-memory",
+      "category": "productivity",
+      "keywords": ["memory", "openviking", "semantic-search"]
+    },
+    {
+      "name": "openviking-wiki",
+      "description": "An agent-authored Markdown wiki stored in OpenViking: init, ingest, query, lint and recover. Depends on openviking-memory for the OpenViking tools.",
+      "source": {
+        "source": "github",
+        "repo": "purisev/openviking-wiki"
+      },
+      "homepage": "https://github.com/purisev/openviking-wiki",
+      "category": "productivity",
+      "keywords": ["wiki", "openviking", "knowledge-base"]
+    }
+  ]
+}
