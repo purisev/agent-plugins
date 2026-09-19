@@ -14,7 +14,7 @@ Or by hand:
 
 ```
 /plugin marketplace add purisev/agent-plugins                 # Claude Code
-/plugin install openviking-wiki@purisev
+/plugin install ov-wiki@purisev
 
 codex plugin marketplace add purisev/agent-plugins            # Codex
 codex plugin add openviking-memory@purisev
@@ -25,7 +25,7 @@ codex plugin add openviking-memory@purisev
 | Plugin | What it does |
 | --- | --- |
 | [`openviking-memory`](https://github.com/purisev/openviking-memory) | Long-term semantic memory backed by an [OpenViking](https://github.com/volcengine/OpenViking) server, plus OpenViking's tools for the agent. |
-| [`openviking-wiki`](https://github.com/purisev/openviking-wiki) | An agent-authored Markdown wiki stored in OpenViking. Depends on `openviking-memory`. |
+| [`ov-wiki`](https://github.com/purisev/openviking-wiki) | An agent-authored Markdown wiki stored in OpenViking. Depends on `openviking-memory`. |
 
 ## This repository
 

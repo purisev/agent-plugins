@@ -6,6 +6,9 @@
     "name": "purisev",
     "url": "https://github.com/purisev"
   },
+  "renames": {
+    "openviking-wiki": "ov-wiki"
+  },
   "plugins": [
     {
       "name": "openviking-memory",
@@ -16,10 +19,14 @@
       },
       "homepage": "https://github.com/purisev/openviking-memory",
       "category": "productivity",
-      "keywords": ["memory", "openviking", "semantic-search"]
+      "keywords": [
+        "memory",
+        "openviking",
+        "semantic-search"
+      ]
     },
     {
-      "name": "openviking-wiki",
+      "name": "ov-wiki",
       "description": "An agent-authored Markdown wiki stored in OpenViking: init, ingest, query, lint and recover. Depends on openviking-memory for the OpenViking tools.",
       "source": {
         "source": "github",
@@ -27,7 +34,11 @@
       },
       "homepage": "https://github.com/purisev/openviking-wiki",
       "category": "productivity",
-      "keywords": ["wiki", "openviking", "knowledge-base"]
+      "keywords": [
+        "wiki",
+        "openviking",
+        "knowledge-base"
+      ]
     }
   ]
 }

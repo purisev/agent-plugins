@@ -7,7 +7,7 @@ published as one marketplace named `purisev`. An installed plugin has the same i
 | Plugin | What it does |
 | --- | --- |
 | [`openviking-memory`](plugins.md#openviking-memory) | Long-term semantic memory backed by an [OpenViking](https://github.com/volcengine/OpenViking) server, plus OpenViking's tools for the agent. |
-| [`openviking-wiki`](plugins.md#openviking-wiki) | An agent-authored Markdown wiki stored in OpenViking. |
+| [`ov-wiki`](plugins.md#ov-wiki) | An agent-authored Markdown wiki stored in OpenViking. |
 
 ## Install
 
@@ -30,7 +30,8 @@ The installer:
    administrator rights, and nothing is installed without a yes;
 2. finds Claude Code and Codex on `PATH`, adds the `purisev` marketplace to each, and installs or
    updates the plugins;
-3. removes, with your consent, an earlier install made from a plugin's own former marketplace, which
+3. removes, with your consent, an install made under a plugin's former id — `openviking-wiki@purisev`,
+   or a copy from a plugin's own former marketplace — which the current plugins replace and which
    would otherwise run every hook twice;
 4. offers to create `~/.openviking/ovcli.conf` when there is none, and leaves an existing one alone.
 
@@ -72,17 +73,17 @@ Claude Code:
 
 ```
 /plugin marketplace add purisev/agent-plugins
-/plugin install openviking-wiki@purisev
+/plugin install ov-wiki@purisev
 ```
 
-`openviking-wiki` declares `openviking-memory` as a dependency, so Claude Code installs both.
+`ov-wiki` declares `openviking-memory` as a dependency, so Claude Code installs both.
 
 Codex:
 
 ```sh
 codex plugin marketplace add purisev/agent-plugins
 codex plugin add openviking-memory@purisev
-codex plugin add openviking-wiki@purisev
+codex plugin add ov-wiki@purisev
 ```
 
 Then start `codex`, run `/hooks`, and approve the hooks `openviking-memory` brings. Codex asks once,

@@ -10,7 +10,7 @@
 param(
   [ValidateSet('claude', 'codex')]
   [string[]]$AgentHost = @(),
-  [ValidateSet('openviking-memory', 'openviking-wiki')]
+  [ValidateSet('openviking-memory', 'ov-wiki')]
   [string[]]$Plugin = @(),
   [switch]$NoConfig,
   [switch]$Yes,
@@ -22,7 +22,14 @@ $ErrorActionPreference = 'Stop'
 
 $Marketplace = 'purisev'
 $MarketplaceRepo = 'purisev/agent-plugins'
-$AllPlugins = @('openviking-memory', 'openviking-wiki')
+$AllPlugins = @('openviking-memory', 'ov-wiki')
+# Ids these plugins were installed under before, with the marketplace to remove along
+# with each. A former copy next to the current one would run every hook twice.
+$FormerInstalls = [ordered]@{
+  'openviking-memory@openviking-memory' = 'openviking-memory'
+  'openviking-wiki@openviking-wiki'     = 'openviking-wiki'
+  'openviking-wiki@purisev'             = ''
+}
 $MinNodeMajor = 18
 $NodeLine = 'v22'
 $NodeDist = "https://nodejs.org/dist/latest-$NodeLine.x"
@@ -125,9 +132,9 @@ function Test-Toolchain {
   }
 
   if (Have 'uv') { Say "  uv: $(& uv --version)" }
-  elseif (Have 'python3') { Say "  python3: $(& python3 --version) (openviking-wiki's optional offline helpers also need PyYAML; uv resolves it by itself)" }
-  elseif (Have 'python') { Say "  python: $(& python --version) (openviking-wiki's optional offline helpers also need PyYAML; uv resolves it by itself)" }
-  else { Say "  neither uv nor python: openviking-wiki works without its optional offline helpers" }
+  elseif (Have 'python3') { Say "  python3: $(& python3 --version) (ov-wiki's optional offline helpers also need PyYAML; uv resolves it by itself)" }
+  elseif (Have 'python') { Say "  python: $(& python --version) (ov-wiki's optional offline helpers also need PyYAML; uv resolves it by itself)" }
+  else { Say "  neither uv nor python: ov-wiki works without its optional offline helpers" }
 }
 
 function Get-AgentHost {
@@ -147,14 +154,11 @@ function Install-IntoClaude([string[]]$Plugins) {
   else { Invoke-Tool claude plugin marketplace add $MarketplaceRepo }
 
   $installed = (& claude plugin list --json 2>$null) -join "`n"
-  # The plugins were first published from marketplaces of their own; a copy from
-  # there next to one from here would run every hook twice.
-  foreach ($name in $AllPlugins) {
-    $old = "$name@$name"
+  foreach ($old in $FormerInstalls.Keys) {
     if ($installed -like "*`"$old`"*") {
-      if (Confirm-Step "Remove the earlier install $old, which would duplicate the hooks?") {
+      if (Confirm-Step "Remove the earlier install $old, which the current plugins replace?") {
         Invoke-Tool claude plugin uninstall $old
-        Invoke-Tool claude plugin marketplace remove $name
+        if ($FormerInstalls[$old]) { Invoke-Tool claude plugin marketplace remove $FormerInstalls[$old] }
       } else {
         Warn "$old stays installed; disable one of the two copies yourself"
       }
@@ -173,6 +177,13 @@ function Install-IntoCodex([string[]]$Plugins) {
   $marketplaces = @(& codex plugin marketplace list 2>$null)
   if ($marketplaces | Where-Object { $_ -match "^$Marketplace\s" }) { Invoke-Tool codex plugin marketplace upgrade $Marketplace }
   else { Invoke-Tool codex plugin marketplace add $MarketplaceRepo }
+  $listed = @(& codex plugin list 2>$null)
+  foreach ($old in $FormerInstalls.Keys) {
+    if ($listed | Where-Object { $_ -match "^$([regex]::Escape($old))\s+installed" }) {
+      if (Confirm-Step "Remove the earlier install $old, which the current plugins replace?") { Invoke-Tool codex plugin remove $old }
+      else { Warn "$old stays installed; remove it yourself" }
+    }
+  }
   foreach ($name in $Plugins) { Invoke-Tool codex plugin add "$name@$Marketplace" }
   $script:CodexInstalled = $true
 }

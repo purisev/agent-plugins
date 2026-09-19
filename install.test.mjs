@@ -40,7 +40,7 @@ function writeTool(binDir, name, body) {
   }
 }
 
-function sandbox({ claudeMarketplaces = "", claudePlugins = "[]", codexMarketplaces = "", nodeVersion = "22.1.0", hosts = ["claude", "codex"] } = {}) {
+function sandbox({ claudeMarketplaces = "", claudePlugins = "[]", codexMarketplaces = "", codexPlugins = "", nodeVersion = "22.1.0", hosts = ["claude", "codex"] } = {}) {
   const root = mkdtempSync(join(tmpdir(), "agent-plugins-install-"));
   const bin = join(root, "bin");
   const home = join(root, "home");
@@ -66,7 +66,7 @@ else if (args[0] === "-p") console.log("${nodeVersion.split(".")[0]}");
 `);
   }
   if (hosts.includes("claude")) tool("claude", { "plugin marketplace list": claudeMarketplaces, "plugin list --json": claudePlugins });
-  if (hosts.includes("codex")) tool("codex", { "plugin marketplace list": codexMarketplaces });
+  if (hosts.includes("codex")) tool("codex", { "plugin marketplace list": codexMarketplaces, "plugin list": codexPlugins });
 
   return { root, bin, home, log, calls: () => readFileSync(log, "utf-8").split("\n").filter(Boolean) };
 }
@@ -114,10 +114,10 @@ for (const installer of installers) {
     assert.deepEqual(changes(box.calls()), [
       "claude plugin marketplace add purisev/agent-plugins",
       "claude plugin install openviking-memory@purisev",
-      "claude plugin install openviking-wiki@purisev",
+      "claude plugin install ov-wiki@purisev",
       "codex plugin marketplace add purisev/agent-plugins",
       "codex plugin add openviking-memory@purisev",
-      "codex plugin add openviking-wiki@purisev",
+      "codex plugin add ov-wiki@purisev",
     ]);
     assert.match(result.stdout, /Codex: run \/hooks once/);
   });
@@ -133,10 +133,10 @@ for (const installer of installers) {
     assert.deepEqual(changes(box.calls()), [
       "claude plugin marketplace update purisev",
       "claude plugin update openviking-memory@purisev",
-      "claude plugin install openviking-wiki@purisev",
+      "claude plugin install ov-wiki@purisev",
       "codex plugin marketplace upgrade purisev",
       "codex plugin add openviking-memory@purisev",
-      "codex plugin add openviking-wiki@purisev",
+      "codex plugin add ov-wiki@purisev",
     ]);
   });
 
@@ -149,6 +149,27 @@ for (const installer of installers) {
       "claude plugin uninstall openviking-memory@openviking-memory",
       "claude plugin marketplace remove openviking-memory",
       "claude plugin install openviking-memory@purisev",
+    ]);
+  });
+
+  it("an install under the plugin's former name is replaced in both hosts, and the marketplace kept", () => {
+    const box = sandbox({
+      claudeMarketplaces: "  ❯ purisev\n    Source: GitHub (purisev/agent-plugins)\n",
+      claudePlugins: JSON.stringify([{ id: "openviking-memory@purisev" }, { id: "openviking-wiki@purisev" }]),
+      codexMarketplaces: "MARKETPLACE  ROOT\npurisev      /somewhere\n",
+      codexPlugins: "PLUGIN  STATUS  VERSION  SOURCE\nopenviking-memory@purisev  installed, enabled  0.9.0  x\nopenviking-wiki@purisev  installed, enabled  0.2.0  x\nov-wiki@purisev  not installed    x\n",
+    });
+    const result = installer.run(box, ["yes"]);
+    assert.equal(result.status, 0, result.stderr + result.stdout);
+    assert.deepEqual(changes(box.calls()), [
+      "claude plugin marketplace update purisev",
+      "claude plugin uninstall openviking-wiki@purisev",
+      "claude plugin update openviking-memory@purisev",
+      "claude plugin install ov-wiki@purisev",
+      "codex plugin marketplace upgrade purisev",
+      "codex plugin remove openviking-wiki@purisev",
+      "codex plugin add openviking-memory@purisev",
+      "codex plugin add ov-wiki@purisev",
     ]);
   });
 
