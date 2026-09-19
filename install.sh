@@ -11,7 +11,10 @@ set -eu
 
 MARKETPLACE="purisev"
 MARKETPLACE_REPO="purisev/agent-plugins"
-ALL_PLUGINS="openviking-memory openviking-wiki"
+ALL_PLUGINS="openviking-memory ov-wiki"
+# Ids these plugins were installed under before, as <id>=<marketplace to remove with it>.
+# A former copy next to the current one would run every hook twice.
+FORMER_INSTALLS="openviking-memory@openviking-memory=openviking-memory openviking-wiki@openviking-wiki=openviking-wiki openviking-wiki@purisev="
 MIN_NODE_MAJOR=18
 NODE_LINE="v22"
 NODE_DIST="https://nodejs.org/dist/latest-${NODE_LINE}.x"
@@ -37,7 +40,7 @@ Usage: install.sh [options]
   --host <claude|codex>   Install into this host only. Repeatable.
                           Default: every supported host found on PATH.
   --plugin <name>         Install this plugin only. Repeatable.
-                          Default: openviking-memory and openviking-wiki.
+                          Default: openviking-memory and ov-wiki.
   --no-config             Do not offer to create ~/.openviking/ovcli.conf.
   -y, --yes               Answer yes to every question. Nothing is asked, so
                           the connection file is not created either.
@@ -194,8 +197,8 @@ check_tools() {
   fi
 
   if have uv; then say "  uv: $(uv --version)"
-  elif have python3; then say "  python3: $(python3 --version) (openviking-wiki's optional offline helpers also need PyYAML; uv resolves it by itself)"
-  else say "  neither uv nor python3: openviking-wiki works without its optional offline helpers"
+  elif have python3; then say "  python3: $(python3 --version) (ov-wiki's optional offline helpers also need PyYAML; uv resolves it by itself)"
+  else say "  neither uv nor python3: ov-wiki works without its optional offline helpers"
   fi
 }
 
@@ -223,14 +226,13 @@ install_into_claude() {
   fi
 
   installed=$(claude plugin list --json 2>/dev/null || true)
-  # The plugins were first published from marketplaces of their own; a copy from
-  # there next to one from here would run every hook twice.
-  for plugin in $ALL_PLUGINS; do
-    old="$plugin@$plugin"
+  for former in $FORMER_INSTALLS; do
+    old="${former%%=*}"
+    old_marketplace="${former#*=}"
     case "$installed" in *"\"$old\""*)
-      if confirm "Remove the earlier install $old, which would duplicate the hooks?"; then
+      if confirm "Remove the earlier install $old, which the current plugins replace?"; then
         run claude plugin uninstall "$old"
-        run claude plugin marketplace remove "$plugin"
+        if [ -n "$old_marketplace" ]; then run claude plugin marketplace remove "$old_marketplace"; fi
       else
         warn "$old stays installed; disable one of the two copies yourself"
       fi ;;
@@ -252,6 +254,17 @@ install_into_codex() {
   else
     run codex plugin marketplace add "$MARKETPLACE_REPO"
   fi
+  listed=$(codex plugin list 2>/dev/null || true)
+  for former in $FORMER_INSTALLS; do
+    old="${former%%=*}"
+    if printf '%s\n' "$listed" | grep -q "^${old}[[:space:]][[:space:]]*installed"; then
+      if confirm "Remove the earlier install $old, which the current plugins replace?"; then
+        run codex plugin remove "$old"
+      else
+        warn "$old stays installed; remove it yourself"
+      fi
+    fi
+  done
   for plugin in $PLUGINS; do
     run codex plugin add "$plugin@$MARKETPLACE"
   done

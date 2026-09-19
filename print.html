@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-d43b3899.js";
+            window.path_to_searchindex_js = "searchindex-ac38e7a4.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-eefae25e.js"></script>
@@ -189,7 +189,7 @@ published as one marketplace named <code>purisev</code>. An installed plugin has
 </thead>
 <tbody>
 <tr><td><a href="#openviking-memory"><code>openviking-memory</code></a></td><td>Long-term semantic memory backed by an <a href="https://github.com/volcengine/OpenViking">OpenViking</a> server, plus OpenViking’s tools for the agent.</td></tr>
-<tr><td><a href="#openviking-wiki"><code>openviking-wiki</code></a></td><td>An agent-authored Markdown wiki stored in OpenViking.</td></tr>
+<tr><td><a href="#ov-wiki"><code>ov-wiki</code></a></td><td>An agent-authored Markdown wiki stored in OpenViking.</td></tr>
 </tbody>
 </table>
 </div>
@@ -207,7 +207,8 @@ missing it offers the official build, checksum-verified, under your home directo
 administrator rights, and nothing is installed without a yes;</li>
 <li>finds Claude Code and Codex on <code>PATH</code>, adds the <code>purisev</code> marketplace to each, and installs or
 updates the plugins;</li>
-<li>removes, with your consent, an earlier install made from a plugin’s own former marketplace, which
+<li>removes, with your consent, an install made under a plugin’s former id — <code>openviking-wiki@purisev</code>,
+or a copy from a plugin’s own former marketplace — which the current plugins replace and which
 would otherwise run every hook twice;</li>
 <li>offers to create <code>~/.openviking/ovcli.conf</code> when there is none, and leaves an existing one alone.</li>
 </ol>
@@ -243,13 +244,13 @@ sh install.sh
 <h2 id="install-by-hand"><a class="header" href="#install-by-hand">Install by hand</a></h2>
 <p>Claude Code:</p>
 <pre><code>/plugin marketplace add purisev/agent-plugins
-/plugin install openviking-wiki@purisev
+/plugin install ov-wiki@purisev
 </code></pre>
-<p><code>openviking-wiki</code> declares <code>openviking-memory</code> as a dependency, so Claude Code installs both.</p>
+<p><code>ov-wiki</code> declares <code>openviking-memory</code> as a dependency, so Claude Code installs both.</p>
 <p>Codex:</p>
 <pre><code class="language-sh">codex plugin marketplace add purisev/agent-plugins
 codex plugin add openviking-memory@purisev
-codex plugin add openviking-wiki@purisev
+codex plugin add ov-wiki@purisev
 </code></pre>
 <p>Then start <code>codex</code>, run <code>/hooks</code>, and approve the hooks <code>openviking-memory</code> brings. Codex asks once,
 and again whenever a plugin update changes them.</p>
@@ -328,8 +329,9 @@ proxy run the bare <code>node</code> command. At session start a small <code>sh<
 missing or too old, so it can offer to install it.</p>
 <p>Skills: <code>openviking-memory</code> (how and when to use the tools), <code>ov-experience-memory</code>, and
 <code>ov-memory-doctor</code> (diagnostics).</p>
-<h2 id="openviking-wiki"><a class="header" href="#openviking-wiki">openviking-wiki</a></h2>
-<p>Repository: <a href="https://github.com/purisev/openviking-wiki">purisev/openviking-wiki</a></p>
+<h2 id="ov-wiki"><a class="header" href="#ov-wiki">ov-wiki</a></h2>
+<p>Repository: <a href="https://github.com/purisev/openviking-wiki">purisev/openviking-wiki</a>. The plugin was called
+<code>openviking-wiki</code> until 0.3.0; the repository keeps that name.</p>
 <p>Maintains a Markdown wiki that the agent writes and keeps consistent, stored in OpenViking: source
 summaries, entity and concept pages, an index and a log. The wiki is private to your user by default
 (<code>viking://user/&lt;you&gt;/resources/wiki</code>); a shared one (<code>viking://resources/wiki</code>) is used only when you
