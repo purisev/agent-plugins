@@ -1,6 +1,9 @@
 # agent-plugins
 
-The `purisev` plugin marketplace for coding agents.
+The `purisev` plugin marketplace for coding agents. One repository serves Claude Code and Codex;
+installed plugins have the same id, `<plugin>@purisev`, under both.
+
+Claude Code:
 
 ```
 /plugin marketplace add purisev/agent-plugins
@@ -9,6 +12,17 @@ The `purisev` plugin marketplace for coding agents.
 
 `/plugin marketplace update purisev` refreshes the catalog; `/plugin` lists what is installed, its
 errors and its settings.
+
+Codex:
+
+```bash
+codex plugin marketplace add purisev/agent-plugins
+codex plugin add <plugin>@purisev
+```
+
+`codex plugin marketplace upgrade purisev` refreshes the catalog. Codex asks once, in `/hooks`, to
+approve the lifecycle hooks a plugin brings. The Codex manifest of `openviking-wiki` declares no
+dependency, so install `openviking-memory` yourself alongside it.
 
 ## Plugins
 
@@ -27,7 +41,9 @@ repository holds only the catalog.
 
 1. Give the plugin repository a `.claude-plugin/plugin.json` with a `name` and a `version`, and check it
    with `claude plugin validate <checkout>/.claude-plugin/plugin.json`.
-2. Add an entry to `.claude-plugin/marketplace.json` with the same `name` and a `github` source.
+2. Add an entry to `.claude-plugin/marketplace.json` with the same `name` and a `github` source, and
+   one to `.agents/plugins/marketplace.json` (Codex) with a `url` source for the same repository and a
+   `policy`. A plugin for Codex also needs a `.codex-plugin/plugin.json`.
 3. A plugin that needs another plugin from this catalog lists it under `dependencies` in its own
    `plugin.json`. A bare name resolves inside this marketplace, so Claude Code installs it
    automatically.
@@ -43,10 +59,12 @@ Claude Code tells plugin versions apart by `version` in `plugin.json`, so bump i
 ```bash
 node --test
 claude plugin validate .
+codex plugin marketplace add . && codex plugin list
 ```
 
-`node --test` guards the catalog's invariants without network access; `claude plugin validate`
-checks it against Claude Code's schema.
+`node --test` guards the catalogs' invariants, and that the two agree, without network access;
+`claude plugin validate` checks the Claude Code one against its schema; `codex plugin list` shows
+what Codex reads from the other.
 
 The marketplace name `purisev` is part of every installed plugin's id (`<plugin>@purisev`) and of
 users' settings. Renaming it would orphan those installs.
