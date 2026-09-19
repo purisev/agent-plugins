@@ -1,0 +1,13 @@
+[book]
+title = "purisev agent plugins"
+description = "Plugins for Claude Code and Codex: long-term memory and a wiki backed by OpenViking, with a one-line installer."
+authors = ["purisev"]
+language = "en"
+src = "docs"
+
+[output.html]
+git-repository-url = "https://github.com/purisev/agent-plugins"
+git-repository-icon = "fab-github"
+edit-url-template = "https://github.com/purisev/agent-plugins/edit/main/{path}"
+# Served from the root of ai-plugins.purisev.com.
+site-url = "/"
