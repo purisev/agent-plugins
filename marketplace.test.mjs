@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";
 
 const marketplace = JSON.parse(readFileSync(new URL("./.claude-plugin/marketplace.json", import.meta.url), "utf-8"));
@@ -52,4 +52,11 @@ test("every Codex entry declares the install policy Codex needs to offer it", ()
     assert.ok(["AVAILABLE", "INSTALLED_BY_DEFAULT", "NOT_AVAILABLE"].includes(plugin.policy?.installation), plugin.name);
     assert.ok(["ON_INSTALL", "ON_USE"].includes(plugin.policy?.authentication), plugin.name);
   }
+});
+
+test("the custom domain is declared in the site's source only", () => {
+  // Pages serves gh-pages, which gets its CNAME from docs/. GitHub adds a CNAME to
+  // the repository root when the domain is saved while main is the Pages source.
+  assert.equal(readFileSync(new URL("./docs/CNAME", import.meta.url), "utf-8").trim(), "ai-plugins.purisev.com");
+  assert.ok(!existsSync(new URL("./CNAME", import.meta.url)));
 });
