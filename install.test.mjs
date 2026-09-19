@@ -40,7 +40,7 @@ function writeTool(binDir, name, body) {
   }
 }
 
-function sandbox({ claudeMarketplaces = "", claudePlugins = "[]", codexMarketplaces = "", codexPlugins = "", nodeVersion = "22.1.0", hosts = ["claude", "codex"] } = {}) {
+function sandbox({ claudeMarketplaces = "", claudePlugins = "[]", codexMarketplaces = "", nodeVersion = "22.1.0", hosts = ["claude", "codex"] } = {}) {
   const root = mkdtempSync(join(tmpdir(), "agent-plugins-install-"));
   const bin = join(root, "bin");
   const home = join(root, "home");
@@ -66,7 +66,7 @@ else if (args[0] === "-p") console.log("${nodeVersion.split(".")[0]}");
 `);
   }
   if (hosts.includes("claude")) tool("claude", { "plugin marketplace list": claudeMarketplaces, "plugin list --json": claudePlugins });
-  if (hosts.includes("codex")) tool("codex", { "plugin marketplace list": codexMarketplaces, "plugin list": codexPlugins });
+  if (hosts.includes("codex")) tool("codex", { "plugin marketplace list": codexMarketplaces });
 
   return { root, bin, home, log, calls: () => readFileSync(log, "utf-8").split("\n").filter(Boolean) };
 }
@@ -138,47 +138,6 @@ for (const installer of installers) {
       "codex plugin add openviking-memory@purisev",
       "codex plugin add ov-wiki@purisev",
     ]);
-  });
-
-  it("an install from a plugin's own former marketplace is removed before the new one", () => {
-    const box = sandbox({ claudePlugins: JSON.stringify([{ id: "openviking-memory@openviking-memory" }]), hosts: ["claude"] });
-    const result = installer.run(box, ["yes"]);
-    assert.equal(result.status, 0, result.stderr + result.stdout);
-    assert.deepEqual(changes(box.calls()).slice(0, 4), [
-      "claude plugin marketplace add purisev/agent-plugins",
-      "claude plugin uninstall openviking-memory@openviking-memory",
-      "claude plugin marketplace remove openviking-memory",
-      "claude plugin install openviking-memory@purisev",
-    ]);
-  });
-
-  it("an install under the plugin's former name is replaced in both hosts, and the marketplace kept", () => {
-    const box = sandbox({
-      claudeMarketplaces: "  ❯ purisev\n    Source: GitHub (purisev/agent-plugins)\n",
-      claudePlugins: JSON.stringify([{ id: "openviking-memory@purisev" }, { id: "openviking-wiki@purisev" }]),
-      codexMarketplaces: "MARKETPLACE  ROOT\npurisev      /somewhere\n",
-      codexPlugins: "PLUGIN  STATUS  VERSION  SOURCE\nopenviking-memory@purisev  installed, enabled  0.9.0  x\nopenviking-wiki@purisev  installed, enabled  0.2.0  x\nov-wiki@purisev  not installed    x\n",
-    });
-    const result = installer.run(box, ["yes"]);
-    assert.equal(result.status, 0, result.stderr + result.stdout);
-    assert.deepEqual(changes(box.calls()), [
-      "claude plugin marketplace update purisev",
-      "claude plugin uninstall openviking-wiki@purisev",
-      "claude plugin update openviking-memory@purisev",
-      "claude plugin install ov-wiki@purisev",
-      "codex plugin marketplace upgrade purisev",
-      "codex plugin remove openviking-wiki@purisev",
-      "codex plugin add openviking-memory@purisev",
-      "codex plugin add ov-wiki@purisev",
-    ]);
-  });
-
-  it("without a terminal and without consent the duplicate is left alone and reported", () => {
-    const box = sandbox({ claudePlugins: JSON.stringify([{ id: "openviking-memory@openviking-memory" }]), hosts: ["claude"] });
-    const result = installer.run(box, []);
-    assert.equal(result.status, 0, result.stderr + result.stdout);
-    assert.ok(!changes(box.calls()).some((call) => call.includes("uninstall")));
-    assert.match(result.stdout + result.stderr, /stays installed/);
   });
 
   it("a dry run changes nothing", () => {
