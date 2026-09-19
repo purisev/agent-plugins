@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const marketplace = JSON.parse(readFileSync(new URL("./.claude-plugin/marketplace.json", import.meta.url), "utf-8"));
+const codexCatalog = JSON.parse(readFileSync(new URL("./.agents/plugins/marketplace.json", import.meta.url), "utf-8"));
 const KEBAB_CASE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 
 test("the marketplace keeps the name installed plugin ids are built from", () => {
@@ -30,4 +31,25 @@ test("every plugin is fetched from its own GitHub repository", () => {
 test("the README lists every plugin", () => {
   const readme = readFileSync(new URL("./README.md", import.meta.url), "utf-8");
   for (const plugin of marketplace.plugins) assert.ok(readme.includes(`\`${plugin.name}\``), `README does not mention ${plugin.name}`);
+});
+
+test("the Codex catalog publishes the same plugins under the same marketplace name", () => {
+  assert.equal(codexCatalog.name, marketplace.name);
+  assert.deepEqual(codexCatalog.plugins.map((p) => p.name).sort(), marketplace.plugins.map((p) => p.name).sort());
+});
+
+test("every Codex entry points at the repository its Claude Code entry names", () => {
+  for (const plugin of codexCatalog.plugins) {
+    const claudeEntry = marketplace.plugins.find((p) => p.name === plugin.name);
+    // Codex has no `github` source type; it takes the clone URL.
+    assert.equal(plugin.source?.source, "url");
+    assert.equal(plugin.source.url, `https://github.com/${claudeEntry.source.repo}.git`);
+  }
+});
+
+test("every Codex entry declares the install policy Codex needs to offer it", () => {
+  for (const plugin of codexCatalog.plugins) {
+    assert.ok(["AVAILABLE", "INSTALLED_BY_DEFAULT", "NOT_AVAILABLE"].includes(plugin.policy?.installation), plugin.name);
+    assert.ok(["ON_INSTALL", "ON_USE"].includes(plugin.policy?.authentication), plugin.name);
+  }
 });
