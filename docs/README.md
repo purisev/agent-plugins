@@ -30,10 +30,7 @@ The installer:
    administrator rights, and nothing is installed without a yes;
 2. finds Claude Code and Codex on `PATH`, adds the `purisev` marketplace to each, and installs or
    updates the plugins;
-3. removes, with your consent, an install made under a plugin's former id — `openviking-wiki@purisev`,
-   or a copy from a plugin's own former marketplace — which the current plugins replace and which
-   would otherwise run every hook twice;
-4. offers to create `~/.openviking/ovcli.conf` when there is none, and leaves an existing one alone.
+3. offers to create `~/.openviking/ovcli.conf` when there is none, and leaves an existing one alone.
 
 It is safe to run again: a second run updates what is there.
 

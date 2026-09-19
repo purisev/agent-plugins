@@ -23,13 +23,6 @@ $ErrorActionPreference = 'Stop'
 $Marketplace = 'purisev'
 $MarketplaceRepo = 'purisev/agent-plugins'
 $AllPlugins = @('openviking-memory', 'ov-wiki')
-# Ids these plugins were installed under before, with the marketplace to remove along
-# with each. A former copy next to the current one would run every hook twice.
-$FormerInstalls = [ordered]@{
-  'openviking-memory@openviking-memory' = 'openviking-memory'
-  'openviking-wiki@openviking-wiki'     = 'openviking-wiki'
-  'openviking-wiki@purisev'             = ''
-}
 $MinNodeMajor = 18
 $NodeLine = 'v22'
 $NodeDist = "https://nodejs.org/dist/latest-$NodeLine.x"
@@ -154,17 +147,6 @@ function Install-IntoClaude([string[]]$Plugins) {
   else { Invoke-Tool claude plugin marketplace add $MarketplaceRepo }
 
   $installed = (& claude plugin list --json 2>$null) -join "`n"
-  foreach ($old in $FormerInstalls.Keys) {
-    if ($installed -like "*`"$old`"*") {
-      if (Confirm-Step "Remove the earlier install $old, which the current plugins replace?") {
-        Invoke-Tool claude plugin uninstall $old
-        if ($FormerInstalls[$old]) { Invoke-Tool claude plugin marketplace remove $FormerInstalls[$old] }
-      } else {
-        Warn "$old stays installed; disable one of the two copies yourself"
-      }
-    }
-  }
-
   foreach ($name in $Plugins) {
     $id = "$name@$Marketplace"
     if ($installed -like "*`"$id`"*") { Invoke-Tool claude plugin update $id }
@@ -177,13 +159,6 @@ function Install-IntoCodex([string[]]$Plugins) {
   $marketplaces = @(& codex plugin marketplace list 2>$null)
   if ($marketplaces | Where-Object { $_ -match "^$Marketplace\s" }) { Invoke-Tool codex plugin marketplace upgrade $Marketplace }
   else { Invoke-Tool codex plugin marketplace add $MarketplaceRepo }
-  $listed = @(& codex plugin list 2>$null)
-  foreach ($old in $FormerInstalls.Keys) {
-    if ($listed | Where-Object { $_ -match "^$([regex]::Escape($old))\s+installed" }) {
-      if (Confirm-Step "Remove the earlier install $old, which the current plugins replace?") { Invoke-Tool codex plugin remove $old }
-      else { Warn "$old stays installed; remove it yourself" }
-    }
-  }
   foreach ($name in $Plugins) { Invoke-Tool codex plugin add "$name@$Marketplace" }
   $script:CodexInstalled = $true
 }

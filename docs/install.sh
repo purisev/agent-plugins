@@ -12,9 +12,6 @@ set -eu
 MARKETPLACE="purisev"
 MARKETPLACE_REPO="purisev/agent-plugins"
 ALL_PLUGINS="openviking-memory ov-wiki"
-# Ids these plugins were installed under before, as <id>=<marketplace to remove with it>.
-# A former copy next to the current one would run every hook twice.
-FORMER_INSTALLS="openviking-memory@openviking-memory=openviking-memory openviking-wiki@openviking-wiki=openviking-wiki openviking-wiki@purisev="
 MIN_NODE_MAJOR=18
 NODE_LINE="v22"
 NODE_DIST="https://nodejs.org/dist/latest-${NODE_LINE}.x"
@@ -226,19 +223,6 @@ install_into_claude() {
   fi
 
   installed=$(claude plugin list --json 2>/dev/null || true)
-  for former in $FORMER_INSTALLS; do
-    old="${former%%=*}"
-    old_marketplace="${former#*=}"
-    case "$installed" in *"\"$old\""*)
-      if confirm "Remove the earlier install $old, which the current plugins replace?"; then
-        run claude plugin uninstall "$old"
-        if [ -n "$old_marketplace" ]; then run claude plugin marketplace remove "$old_marketplace"; fi
-      else
-        warn "$old stays installed; disable one of the two copies yourself"
-      fi ;;
-    esac
-  done
-
   for plugin in $PLUGINS; do
     case "$installed" in
       *"\"$plugin@$MARKETPLACE\""*) run claude plugin update "$plugin@$MARKETPLACE" ;;
@@ -254,17 +238,6 @@ install_into_codex() {
   else
     run codex plugin marketplace add "$MARKETPLACE_REPO"
   fi
-  listed=$(codex plugin list 2>/dev/null || true)
-  for former in $FORMER_INSTALLS; do
-    old="${former%%=*}"
-    if printf '%s\n' "$listed" | grep -q "^${old}[[:space:]][[:space:]]*installed"; then
-      if confirm "Remove the earlier install $old, which the current plugins replace?"; then
-        run codex plugin remove "$old"
-      else
-        warn "$old stays installed; remove it yourself"
-      fi
-    fi
-  done
   for plugin in $PLUGINS; do
     run codex plugin add "$plugin@$MARKETPLACE"
   done
