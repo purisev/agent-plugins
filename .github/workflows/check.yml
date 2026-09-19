@@ -5,12 +5,51 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
-  catalog:
-    runs-on: ubuntu-latest
+  tests:
+    name: node --test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # install.sh runs on Linux and macOS, install.ps1 wherever pwsh is, which is
+        # all three; Windows is the only place its Windows-specific paths execute.
+        os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
       - run: node --test
+
+  lint:
+    name: shellcheck and mdbook
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: shellcheck
+        run: shellcheck --shell=sh docs/install.sh
+      - name: PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          Install-Module PSScriptAnalyzer -Force -Scope CurrentUser
+          # Write-Host is how an installer talks to the person running it. The script's
+          # parameters are read inside its functions, which PSReviewUnusedParameter cannot see.
+          $findings = Invoke-ScriptAnalyzer -Path docs/install.ps1 -Severity Error, Warning -ExcludeRule PSAvoidUsingWriteHost, PSReviewUnusedParameter
+          $findings | Format-Table -AutoSize
+          if ($findings) { exit 1 }
+      - name: Install mdbook
+        run: |
+          tag=$(curl -fsSL 'https://api.github.com/repos/rust-lang/mdbook/releases/latest' | jq -r '.tag_name')
+          mkdir mdbook-bin
+          curl -fsSL "https://github.com/rust-lang/mdbook/releases/download/${tag}/mdbook-${tag}-x86_64-unknown-linux-gnu.tar.gz" | tar -xz --directory=./mdbook-bin
+          echo "$(pwd)/mdbook-bin" >> "$GITHUB_PATH"
+      - name: Build the site
+        run: mdbook build
+      - name: The site serves the installers unchanged
+        run: |
+          cmp docs/install.sh book/install.sh
+          cmp docs/install.ps1 book/install.ps1
