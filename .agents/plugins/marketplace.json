@@ -18,7 +18,7 @@
       "category": "Productivity"
     },
     {
-      "name": "openviking-wiki",
+      "name": "ov-wiki",
       "source": {
         "source": "url",
         "url": "https://github.com/purisev/openviking-wiki.git",

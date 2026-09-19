@@ -60,3 +60,9 @@ test("the custom domain is declared in the site's source only", () => {
   assert.equal(readFileSync(new URL("./docs/CNAME", import.meta.url), "utf-8").trim(), "ai-plugins.purisev.com");
   assert.ok(!existsSync(new URL("./CNAME", import.meta.url)));
 });
+
+test("the former plugin name is declared as a rename and no longer listed", () => {
+  assert.deepEqual(marketplace.renames, { "openviking-wiki": "ov-wiki" });
+  assert.ok(marketplace.plugins.some((plugin) => plugin.name === "ov-wiki"));
+  assert.ok(!marketplace.plugins.some((plugin) => plugin.name === "openviking-wiki"));
+});

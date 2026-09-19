@@ -22,9 +22,10 @@ missing or too old, so it can offer to install it.
 Skills: `openviking-memory` (how and when to use the tools), `ov-experience-memory`, and
 `ov-memory-doctor` (diagnostics).
 
-## openviking-wiki
+## ov-wiki
 
-Repository: [purisev/openviking-wiki](https://github.com/purisev/openviking-wiki)
+Repository: [purisev/openviking-wiki](https://github.com/purisev/openviking-wiki). The plugin was called
+`openviking-wiki` until 0.3.0; the repository keeps that name.
 
 Maintains a Markdown wiki that the agent writes and keeps consistent, stored in OpenViking: source
 summaries, entity and concept pages, an index and a log. The wiki is private to your user by default
