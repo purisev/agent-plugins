@@ -12,6 +12,7 @@ import { fileURLToPath } from "node:url";
 const WINDOWS = process.platform === "win32";
 const SH_SCRIPT = fileURLToPath(new URL("./docs/install.sh", import.meta.url));
 const PS_SCRIPT = fileURLToPath(new URL("./docs/install.ps1", import.meta.url));
+const ALL_PLUGINS = JSON.parse(readFileSync(new URL("./.claude-plugin/marketplace.json", import.meta.url), "utf-8")).plugins.map((p) => p.name);
 
 function findOnPath(name) {
   const extensions = WINDOWS ? [".exe", ".cmd", ""] : [""];
@@ -107,17 +108,15 @@ const installers = [
 for (const installer of installers) {
   const it = (title, fn) => test(`${installer.name}: ${title}`, { skip: installer.skip }, fn);
 
-  it("a first run adds the marketplace and installs both plugins into both hosts", () => {
+  it("a first run adds the marketplace and installs every plugin into both hosts", () => {
     const box = sandbox();
     const result = installer.run(box, ["yes"]);
     assert.equal(result.status, 0, result.stderr + result.stdout);
     assert.deepEqual(changes(box.calls()), [
       "claude plugin marketplace add purisev/agent-plugins",
-      "claude plugin install openviking-memory@purisev",
-      "claude plugin install ov-wiki@purisev",
+      ...ALL_PLUGINS.map((plugin) => `claude plugin install ${plugin}@purisev`),
       "codex plugin marketplace add purisev/agent-plugins",
-      "codex plugin add openviking-memory@purisev",
-      "codex plugin add ov-wiki@purisev",
+      ...ALL_PLUGINS.map((plugin) => `codex plugin add ${plugin}@purisev`),
     ]);
     assert.match(result.stdout, /Codex: run \/hooks once/);
   });
@@ -133,10 +132,9 @@ for (const installer of installers) {
     assert.deepEqual(changes(box.calls()), [
       "claude plugin marketplace update purisev",
       "claude plugin update openviking-memory@purisev",
-      "claude plugin install ov-wiki@purisev",
+      ...ALL_PLUGINS.slice(1).map((plugin) => `claude plugin install ${plugin}@purisev`),
       "codex plugin marketplace upgrade purisev",
-      "codex plugin add openviking-memory@purisev",
-      "codex plugin add ov-wiki@purisev",
+      ...ALL_PLUGINS.map((plugin) => `codex plugin add ${plugin}@purisev`),
     ]);
   });
 

@@ -11,7 +11,7 @@ set -eu
 
 MARKETPLACE="purisev"
 MARKETPLACE_REPO="purisev/agent-plugins"
-ALL_PLUGINS="openviking-memory ov-wiki"
+ALL_PLUGINS="openviking-memory ov-wiki humanizer ponytail infra playwright"
 MIN_NODE_MAJOR=18
 NODE_LINE="v22"
 NODE_DIST="https://nodejs.org/dist/latest-${NODE_LINE}.x"
@@ -37,7 +37,7 @@ Usage: install.sh [options]
   --host <claude|codex>   Install into this host only. Repeatable.
                           Default: every supported host found on PATH.
   --plugin <name>         Install this plugin only. Repeatable.
-                          Default: openviking-memory and ov-wiki.
+                          Default: every plugin in the catalog.
   --no-config             Do not offer to create ~/.openviking/ovcli.conf.
   -y, --yes               Answer yes to every question. Nothing is asked, so
                           the connection file is not created either.
@@ -182,14 +182,14 @@ check_tools() {
     say "  node: $(node --version)"
   else
     if have node; then say "  node: $(node --version) is older than $MIN_NODE_MAJOR"; else say "  node: not found"; fi
-    say "  openviking-memory runs its hooks and MCP server with the bare node command."
+    say "  openviking-memory and ponytail run their hooks with the bare node command."
     if confirm "Install the official Node.js $NODE_LINE build under ~/.local (no root needed)?"; then
       install_node
       if [ "$local_bin_was_on_path" -eq 0 ]; then
         warn "$HOME/.local/bin is not on your PATH. Add it to your shell profile, or the hosts will not find node."
       fi
     else
-      warn "continuing without a usable node; openviking-memory stays inactive until Node.js $MIN_NODE_MAJOR or newer is on PATH"
+      warn "continuing without a usable node; openviking-memory stays inactive until Node.js $MIN_NODE_MAJOR or newer is on PATH, and ponytail's hooks fail"
     fi
   fi
 
@@ -283,7 +283,7 @@ finish() {
   step "Done"
   say "  Restart the hosts so they load the plugins."
   if [ "${CODEX_INSTALLED:-0}" -eq 1 ]; then
-    say "  Codex: run /hooks once and approve the hooks openviking-memory brings."
+    say "  Codex: run /hooks once and approve the hooks openviking-memory and ponytail bring."
   fi
   say "  Check the setup with the ov-memory-doctor skill; it names anything still missing."
   say "  Documentation: https://ai-plugins.purisev.com"

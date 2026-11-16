@@ -10,7 +10,8 @@
         "source": "git-subdir",
         "url": "https://github.com/volcengine/OpenViking.git",
         "path": "examples/codex-memory-plugin",
-        "ref": "v0.5.5"
+        "ref": "v0.5.5",
+        "sha": "4f4b09c8b81cc52cc0361ec7d9f189ce0ccda35b"
       },
       "policy": {
         "installation": "AVAILABLE",
@@ -23,6 +24,62 @@
       "source": {
         "source": "url",
         "url": "https://github.com/purisev/openviking-wiki.git",
+        "ref": "main"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_USE"
+      },
+      "category": "Productivity"
+    },
+    {
+      "name": "humanizer",
+      "source": {
+        "source": "git-subdir",
+        "url": "https://github.com/purisev/agent-skills.git",
+        "path": "humanizer",
+        "ref": "main"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_USE"
+      },
+      "category": "Productivity"
+    },
+    {
+      "name": "ponytail",
+      "source": {
+        "source": "url",
+        "url": "https://github.com/DietrichGebert/ponytail.git",
+        "ref": "v5.3.3",
+        "sha": "7801d061243d7b753bad0e0b3c057cd250b11755"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_USE"
+      },
+      "category": "Productivity"
+    },
+    {
+      "name": "infra",
+      "source": {
+        "source": "git-subdir",
+        "url": "https://github.com/purisev/agent-skills.git",
+        "path": "infra",
+        "ref": "main"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_USE"
+      },
+      "category": "Productivity"
+    },
+    {
+      "name": "playwright",
+      "source": {
+        "source": "git-subdir",
+        "url": "https://github.com/purisev/agent-skills.git",
+        "path": "playwright",
         "ref": "main"
       },
       "policy": {

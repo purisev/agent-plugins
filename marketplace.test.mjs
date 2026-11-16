@@ -21,30 +21,41 @@ test("every plugin has a unique kebab-case name and a description", () => {
   }
 });
 
-// Plugins maintained here come from their own GitHub repository. openviking-memory is the
-// official OpenViking plugin, taken from a subdirectory of the upstream repository and pinned
-// to a release tag so an install never follows upstream main.
-const UPSTREAM = {
-  "openviking-memory": {
-    url: "https://github.com/volcengine/OpenViking.git",
-    claude: "examples/claude-code-memory-plugin",
-    codex: "examples/codex-memory-plugin",
-  },
-};
+// Plugins maintained by purisev follow the default branch of their repository. Third-party plugins
+// are pinned to a commit, with the release tag or branch it came from as `ref`, so an install never
+// follows someone else's branch.
+const OWN = /^https:\/\/github\.com\/purisev\//;
+const SHA = /^[0-9a-f]{40}$/;
 const RELEASE_TAG = /^v\d+\.\d+\.\d+(\.\d+)?$/;
+const AGENT_SKILLS = "https://github.com/purisev/agent-skills.git";
+// openviking-memory ships a separate plugin directory per host.
+const CODEX_PATHS = { "openviking-memory": "examples/codex-memory-plugin" };
+// Codex finds skills only in a plugin with a manifest and a skills/ directory. These sources have
+// neither, so Codex installs a copy kept in purisev/agent-skills, which checks it against the commit
+// pinned here.
+const CODEX_WRAPPERS = ["humanizer", "playwright"];
 
-test("every plugin is fetched from its own GitHub repository or a pinned upstream release", () => {
+const cloneUrl = (source) => (source.source === "github" ? `https://github.com/${source.repo}.git` : source.url);
+
+test("every plugin follows its own repository or is pinned to a third-party commit", () => {
   for (const plugin of marketplace.plugins) {
-    const upstream = UPSTREAM[plugin.name];
-    if (upstream) {
-      assert.equal(plugin.source?.source, "git-subdir", `${plugin.name} must use a git-subdir source`);
-      assert.equal(plugin.source.url, upstream.url);
-      assert.equal(plugin.source.path, upstream.claude);
-      assert.match(plugin.source.ref, RELEASE_TAG, `${plugin.name} must be pinned to a release tag`);
+    const { source } = plugin;
+    assert.ok(["github", "git-subdir"].includes(source?.source), `${plugin.name} must use a github or git-subdir source`);
+    if (source.source === "github") assert.match(source.repo, /^[\w.-]+\/[\w.-]+$/);
+    else assert.ok(source.path, `${plugin.name} needs a path`);
+    if (OWN.test(cloneUrl(source))) {
+      assert.equal(source.ref, undefined, `${plugin.name} must follow its default branch`);
+      assert.equal(source.sha, undefined, `${plugin.name} must follow its default branch`);
     } else {
-      assert.equal(plugin.source?.source, "github", `${plugin.name} must use a github source`);
-      assert.match(plugin.source.repo, /^[\w.-]+\/[\w.-]+$/);
+      assert.match(source.sha ?? "", SHA, `${plugin.name} must be pinned to a commit`);
+      assert.ok(source.ref, `${plugin.name} must name the tag or branch of its commit`);
     }
+  }
+});
+
+test("a third-party release tag is pinned together with its commit", () => {
+  for (const plugin of marketplace.plugins.filter((p) => !OWN.test(cloneUrl(p.source)))) {
+    if (plugin.source.ref.startsWith("v")) assert.match(plugin.source.ref, RELEASE_TAG, plugin.name);
   }
 });
 
@@ -58,21 +69,32 @@ test("the Codex catalog publishes the same plugins under the same marketplace na
   assert.deepEqual(codexCatalog.plugins.map((p) => p.name).sort(), marketplace.plugins.map((p) => p.name).sort());
 });
 
-test("every Codex entry points at the repository and release its Claude Code entry names", () => {
+test("every Codex entry installs what its Claude Code entry names", () => {
   for (const plugin of codexCatalog.plugins) {
-    const claudeEntry = marketplace.plugins.find((p) => p.name === plugin.name);
-    const upstream = UPSTREAM[plugin.name];
-    if (upstream) {
-      // Same upstream repository and tag; Codex installs its own plugin directory.
-      assert.equal(plugin.source?.source, "git-subdir");
-      assert.equal(plugin.source.url, claudeEntry.source.url);
-      assert.equal(plugin.source.ref, claudeEntry.source.ref);
-      assert.equal(plugin.source.path, upstream.codex);
-    } else {
+    const claude = marketplace.plugins.find((p) => p.name === plugin.name).source;
+    const url = cloneUrl(claude);
+    if (CODEX_WRAPPERS.includes(plugin.name)) {
+      assert.deepEqual(plugin.source, { source: "git-subdir", url: AGENT_SKILLS, path: plugin.name, ref: "main" });
+    } else if (claude.source === "github") {
       // Codex has no `github` source type; it takes the clone URL.
-      assert.equal(plugin.source?.source, "url");
-      assert.equal(plugin.source.url, `https://github.com/${claudeEntry.source.repo}.git`);
+      assert.deepEqual(plugin.source, { source: "url", url, ref: claude.ref ?? "main", ...(claude.sha && { sha: claude.sha }) });
+    } else {
+      assert.deepEqual(plugin.source, {
+        source: "git-subdir",
+        url,
+        path: CODEX_PATHS[plugin.name] ?? claude.path,
+        ref: claude.ref ?? "main",
+        ...(claude.sha && { sha: claude.sha }),
+      });
     }
+  }
+});
+
+test("every Codex wrapper stands in for a listed third-party plugin", () => {
+  for (const name of CODEX_WRAPPERS) {
+    const claude = marketplace.plugins.find((p) => p.name === name);
+    assert.ok(claude, `${name} is listed`);
+    assert.ok(!OWN.test(cloneUrl(claude.source)), `${name} is third-party`);
   }
 });
 

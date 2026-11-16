@@ -53,6 +53,10 @@ claude plugin uninstall openviking-memory@openviking-memory
 claude plugin marketplace remove openviking-memory
 ```
 
+Third-party plugins have marketplaces of their own too. If you installed `humanizer` or `ponytail` from
+them before, remove those copies the same way: `humanizer@humanizer` and the `humanizer` marketplace,
+`ponytail@ponytail` and the `ponytail` marketplace.
+
 ## Recall is empty, captures do not land
 
 - **The key is wrong.** `/health` answers 200 regardless, so look at the doctor's "credentials accepted"

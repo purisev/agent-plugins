@@ -10,7 +10,7 @@
 param(
   [ValidateSet('claude', 'codex')]
   [string[]]$AgentHost = @(),
-  [ValidateSet('openviking-memory', 'ov-wiki')]
+  [ValidateSet('openviking-memory', 'ov-wiki', 'humanizer', 'ponytail', 'infra', 'playwright')]
   [string[]]$Plugin = @(),
   [switch]$NoConfig,
   [switch]$Yes,
@@ -22,7 +22,7 @@ $ErrorActionPreference = 'Stop'
 
 $Marketplace = 'purisev'
 $MarketplaceRepo = 'purisev/agent-plugins'
-$AllPlugins = @('openviking-memory', 'ov-wiki')
+$AllPlugins = @('openviking-memory', 'ov-wiki', 'humanizer', 'ponytail', 'infra', 'playwright')
 $MinNodeMajor = 18
 $NodeLine = 'v22'
 $NodeDist = "https://nodejs.org/dist/latest-$NodeLine.x"
@@ -116,11 +116,11 @@ function Test-Toolchain {
     Say "  node: $(& node --version)"
   } else {
     if ($major -gt 0) { Say "  node: $(& node --version) is older than $MinNodeMajor" } else { Say '  node: not found' }
-    Say '  openviking-memory runs its hooks and MCP server with the bare node command.'
+    Say '  openviking-memory and ponytail run their hooks with the bare node command.'
     if (Confirm-Step "Install the official Node.js $NodeLine build under your user profile (no administrator rights needed)?") {
       Install-Node
     } else {
-      Warn "continuing without a usable node; openviking-memory stays inactive until Node.js $MinNodeMajor or newer is on PATH"
+      Warn "continuing without a usable node; openviking-memory stays inactive until Node.js $MinNodeMajor or newer is on PATH, and ponytail's hooks fail"
     }
   }
 
@@ -203,7 +203,7 @@ function Main {
 
   Step 'Done'
   Say '  Restart the hosts so they load the plugins.'
-  if ($script:CodexInstalled) { Say '  Codex: run /hooks once and approve the hooks openviking-memory brings.' }
+  if ($script:CodexInstalled) { Say '  Codex: run /hooks once and approve the hooks openviking-memory and ponytail bring.' }
   Say '  Check the setup with the ov-memory-doctor skill; it names anything still missing.'
   Say '  Documentation: https://ai-plugins.purisev.com'
 }

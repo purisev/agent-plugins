@@ -8,6 +8,10 @@ published as one marketplace named `purisev`. An installed plugin has the same i
 | --- | --- |
 | [`openviking-memory`](plugins.md#openviking-memory) | Long-term semantic memory backed by an [OpenViking](https://github.com/volcengine/OpenViking) server, plus OpenViking's tools for the agent. |
 | [`ov-wiki`](plugins.md#ov-wiki) | An agent-authored Markdown wiki stored in OpenViking. |
+| [`humanizer`](plugins.md#humanizer) | Rewrites AI-sounding text so it reads like the writer. |
+| [`ponytail`](plugins.md#ponytail) | Steers the agent towards the smallest change that solves the task. |
+| [`infra`](plugins.md#infra) | Skills for Ansible, Helm, Terraform, Terramate and MetricsQL. |
+| [`playwright`](plugins.md#playwright) | Browser tests, automation and scraping with Playwright. |
 
 ## Install
 
@@ -25,9 +29,9 @@ irm https://ai-plugins.purisev.com/install.ps1 | iex
 
 The installer:
 
-1. checks for `git` and for Node.js 18 or newer, which `openviking-memory` runs on. When Node.js is
-   missing it offers the official build, checksum-verified, under your home directory — no root or
-   administrator rights, and nothing is installed without a yes;
+1. checks for `git` and for Node.js 18 or newer, which the hooks of `openviking-memory` and `ponytail`
+   run on. When Node.js is missing it offers the official build, checksum-verified, under your home
+   directory — no root or administrator rights, and nothing is installed without a yes;
 2. finds Claude Code and Codex on `PATH`, adds the `purisev` marketplace to each, and installs or
    updates the plugins;
 3. offers to create `~/.openviking/ovcli.conf` when there is none, and leaves an existing one alone.
@@ -83,8 +87,9 @@ codex plugin add openviking-memory@purisev
 codex plugin add ov-wiki@purisev
 ```
 
-Then start `codex`, run `/hooks`, and approve the hooks `openviking-memory` brings. Codex asks once,
-and again whenever a plugin update changes them.
+The other plugins install the same way, as `codex plugin add <plugin>@purisev`. Then start `codex`,
+run `/hooks`, and approve the hooks `openviking-memory` and `ponytail` bring. Codex asks once, and again
+whenever a plugin update changes them.
 
 ## After installing
 
