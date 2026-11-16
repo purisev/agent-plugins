@@ -2,25 +2,37 @@
 
 ## openviking-memory
 
-Repository: [purisev/openviking-memory](https://github.com/purisev/openviking-memory)
+Source: the official OpenViking plugins, pinned to release **v0.5.5** — Claude Code installs
+[`examples/claude-code-memory-plugin`](https://github.com/volcengine/OpenViking/tree/v0.5.5/examples/claude-code-memory-plugin)
+(plugin 0.7.22), Codex installs
+[`examples/codex-memory-plugin`](https://github.com/volcengine/OpenViking/tree/v0.5.5/examples/codex-memory-plugin)
+(plugin 0.11.21). Both are named `openviking-memory`, so `ov-wiki`'s dependency resolves on either host.
 
 Gives the agent a memory that outlives the session, kept on your OpenViking server.
 
 - **Session start** — injects your profile and an index of stored preferences and entities.
 - **Every prompt** — recalls memories relevant to it and adds them to the turn.
-- **Every turn end** — appends the new messages to a server-side session.
+- **Every turn end** — appends the new messages to a server-side session and commits it once the
+  server reports more pending tokens than `commitTokenThreshold` (default 20000).
 - **Session end and before compaction** — commits the session, and the server extracts durable
-  memories from it.
-- **Tools** — a local MCP proxy exposes the server's tools to the agent: `search`, `find`, `read`,
-  `list`, `tree`, `glob`, `grep`, `write`, `edit`, `remember`, `forget`, `add_resource`, `list_watches`,
-  `cancel_watch`, `health`.
+  memories from it. Claude Code also captures subagents.
+- **Tools** — a local MCP proxy forwards the server's own MCP tools (`search`, `find`, `read`, `list`,
+  `glob`, `grep`, `write`, `edit`, `remember`, …); the exact set comes from your server version.
 
 Needs Node.js 18 or newer on the `PATH` of the environment that launches the host: the hooks and the
-proxy run the bare `node` command. At session start a small `sh` check tells the agent when `node` is
-missing or too old, so it can offer to install it.
+proxy run the bare `node` command.
 
-Skills: `openviking-memory` (how and when to use the tools), `ov-experience-memory`, and
-`ov-memory-doctor` (diagnostics).
+Skills: `openviking-memory`, `ov-experience-memory`, `ov-memory-doctor`, `openviking-skills` and
+`openviking-rule-search`. Full reference:
+[Claude Code](https://github.com/volcengine/OpenViking/blob/v0.5.5/docs/en/agent-integrations/02-claude-code.md),
+[Codex](https://github.com/volcengine/OpenViking/blob/v0.5.5/docs/en/agent-integrations/04-codex.md).
+
+Memories are filed under a workspace peer derived from the repository's git `origin` (falling back to
+the repository root). Outside a git repository memories go to your user-level space. Memories filed under
+a peer derived from the working directory are still recalled; to keep writing under such peers, set
+`"peerSource": "cwd"` under `plugin` in `~/.openviking/ovcli.conf`.
+
+To update to a newer OpenViking release, change `ref` in both marketplace files to the new tag.
 
 ## ov-wiki
 

@@ -21,10 +21,30 @@ test("every plugin has a unique kebab-case name and a description", () => {
   }
 });
 
-test("every plugin is fetched from its own GitHub repository", () => {
+// Plugins maintained here come from their own GitHub repository. openviking-memory is the
+// official OpenViking plugin, taken from a subdirectory of the upstream repository and pinned
+// to a release tag so an install never follows upstream main.
+const UPSTREAM = {
+  "openviking-memory": {
+    url: "https://github.com/volcengine/OpenViking.git",
+    claude: "examples/claude-code-memory-plugin",
+    codex: "examples/codex-memory-plugin",
+  },
+};
+const RELEASE_TAG = /^v\d+\.\d+\.\d+(\.\d+)?$/;
+
+test("every plugin is fetched from its own GitHub repository or a pinned upstream release", () => {
   for (const plugin of marketplace.plugins) {
-    assert.equal(plugin.source?.source, "github", `${plugin.name} must use a github source`);
-    assert.match(plugin.source.repo, /^[\w.-]+\/[\w.-]+$/);
+    const upstream = UPSTREAM[plugin.name];
+    if (upstream) {
+      assert.equal(plugin.source?.source, "git-subdir", `${plugin.name} must use a git-subdir source`);
+      assert.equal(plugin.source.url, upstream.url);
+      assert.equal(plugin.source.path, upstream.claude);
+      assert.match(plugin.source.ref, RELEASE_TAG, `${plugin.name} must be pinned to a release tag`);
+    } else {
+      assert.equal(plugin.source?.source, "github", `${plugin.name} must use a github source`);
+      assert.match(plugin.source.repo, /^[\w.-]+\/[\w.-]+$/);
+    }
   }
 });
 
@@ -38,12 +58,21 @@ test("the Codex catalog publishes the same plugins under the same marketplace na
   assert.deepEqual(codexCatalog.plugins.map((p) => p.name).sort(), marketplace.plugins.map((p) => p.name).sort());
 });
 
-test("every Codex entry points at the repository its Claude Code entry names", () => {
+test("every Codex entry points at the repository and release its Claude Code entry names", () => {
   for (const plugin of codexCatalog.plugins) {
     const claudeEntry = marketplace.plugins.find((p) => p.name === plugin.name);
-    // Codex has no `github` source type; it takes the clone URL.
-    assert.equal(plugin.source?.source, "url");
-    assert.equal(plugin.source.url, `https://github.com/${claudeEntry.source.repo}.git`);
+    const upstream = UPSTREAM[plugin.name];
+    if (upstream) {
+      // Same upstream repository and tag; Codex installs its own plugin directory.
+      assert.equal(plugin.source?.source, "git-subdir");
+      assert.equal(plugin.source.url, claudeEntry.source.url);
+      assert.equal(plugin.source.ref, claudeEntry.source.ref);
+      assert.equal(plugin.source.path, upstream.codex);
+    } else {
+      // Codex has no `github` source type; it takes the clone URL.
+      assert.equal(plugin.source?.source, "url");
+      assert.equal(plugin.source.url, `https://github.com/${claudeEntry.source.repo}.git`);
+    }
   }
 });
 

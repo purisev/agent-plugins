@@ -2,7 +2,8 @@
 
 Each plugin lives in its own repository, which holds its code, reference documentation and issues.
 [purisev/agent-plugins](https://github.com/purisev/agent-plugins) holds the two catalogs, the installer
-and this site.
+and this site. `openviking-memory` is the exception: both catalogs take the official plugin from a
+subdirectory of the OpenViking repository through a `git-subdir` source pinned to a release tag.
 
 1. Give the plugin repository a `.claude-plugin/plugin.json` with a `name` and a `version`, and check it
    with `claude plugin validate <checkout>/.claude-plugin/plugin.json`. For Codex it also needs a

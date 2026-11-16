@@ -261,8 +261,7 @@ configure_connection() {
     return 0
   fi
   if ! can_ask; then
-    say "  $conf does not exist. Create it with \"url\" and \"api_key\" (chmod 600),"
-    say "  or answer the connection prompts when Claude Code enables the plugin."
+    say "  $conf does not exist. Create it with \"url\" and \"api_key\" (chmod 600)."
     return 0
   fi
   if ! confirm "Create $conf now? Claude Code and Codex both read it."; then return 0; fi

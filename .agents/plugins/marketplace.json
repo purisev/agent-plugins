@@ -7,9 +7,10 @@
     {
       "name": "openviking-memory",
       "source": {
-        "source": "url",
-        "url": "https://github.com/purisev/openviking-memory.git",
-        "ref": "main"
+        "source": "git-subdir",
+        "url": "https://github.com/volcengine/OpenViking.git",
+        "path": "examples/codex-memory-plugin",
+        "ref": "v0.5.5"
       },
       "policy": {
         "installation": "AVAILABLE",
