@@ -29,11 +29,24 @@ No recalled context, no tools, nothing logged.
 - **The plugin is disabled**, or Claude Code disabled it over a missing dependency. `claude plugin list`
   shows the state and the reason.
 
+## Moving from the fork to the upstream plugin
+
+`openviking-memory@purisev` used to come from the fork `purisev/openviking-memory`. It now comes from
+the official OpenViking repository. Refresh the marketplace and update the plugin:
+
+```sh
+claude plugin marketplace update purisev && claude plugin update openviking-memory@purisev
+codex plugin marketplace upgrade purisev && codex plugin add openviking-memory@purisev
+```
+
+Restart the host afterwards. Codex asks to approve the new hooks once (`/hooks`). Keys the fork read,
+such as `plugin.codex.serverAutoCommit`, are ignored and can be removed from `ovcli.conf`.
+
 ## Every hook runs twice
 
 The same plugin is enabled from two marketplaces — typically `openviking-memory@purisev` next to an
-earlier `openviking-memory@openviking-memory`. The doctor reports "more than one copy". Remove the old
-one:
+earlier `openviking-memory@openviking-memory`. The doctor reports "more than one openviking plugin is
+enabled". Remove the old one:
 
 ```sh
 claude plugin uninstall openviking-memory@openviking-memory
@@ -50,13 +63,6 @@ claude plugin marketplace remove openviking-memory
   `plugin.claude_code` under Codex. Put shared settings directly under `plugin`.
 - **The server cannot reach its embedding provider.** The doctor's Server health section shows `/ready`
   per subsystem; the fix is on the server.
-
-## The doctor says "no usable config" but memory works
-
-Under Claude Code the connection may have been entered at the plugin's prompts. Claude Code hands those
-answers to hooks and MCP servers, not to a shell, and keeps the key in its own credential store. The
-doctor reads the non-sensitive answers from Claude Code's settings and says so; for its authenticated
-checks, run it with `OPENVIKING_API_KEY` set in that shell.
 
 ## `404` on `profile.md`, `preferences`, `entities` in the server log
 

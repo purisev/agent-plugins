@@ -24,7 +24,7 @@ codex plugin add openviking-memory@purisev
 
 | Plugin | What it does |
 | --- | --- |
-| [`openviking-memory`](https://github.com/purisev/openviking-memory) | Long-term semantic memory backed by an [OpenViking](https://github.com/volcengine/OpenViking) server, plus OpenViking's tools for the agent. |
+| [`openviking-memory`](docs/plugins.md#openviking-memory) | Long-term semantic memory backed by an [OpenViking](https://github.com/volcengine/OpenViking) server, plus OpenViking's tools for the agent. The official upstream plugin, pinned to OpenViking v0.5.5. |
 | [`ov-wiki`](https://github.com/purisev/openviking-wiki) | An agent-authored Markdown wiki stored in OpenViking. Depends on `openviking-memory`. |
 
 ## This repository

@@ -171,8 +171,7 @@ function Initialize-Connection([string[]]$Plugins) {
   if (Test-Path $conf) { Say "  $conf exists; leaving it as it is"; return }
   if ($env:OPENVIKING_URL -or $env:OPENVIKING_BASE_URL) { Say "  OPENVIKING_URL is set in this environment; not creating $conf"; return }
   if (-not (CanAsk)) {
-    Say "  $conf does not exist. Create it with `"url`" and `"api_key`", readable by you only,"
-    Say '  or answer the connection prompts when Claude Code enables the plugin.'
+    Say "  $conf does not exist. Create it with `"url`" and `"api_key`", readable by you only."
     return
   }
   if (-not (Confirm-Step "Create $conf now? Claude Code and Codex both read it.")) { return }

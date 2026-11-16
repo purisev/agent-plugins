@@ -24,15 +24,15 @@ First match wins:
 
 1. `OPENVIKING_URL`, `OPENVIKING_API_KEY`, `OPENVIKING_ACCOUNT`, `OPENVIKING_USER` in the environment
    that launches the host.
-2. Under Claude Code only: the answers to the prompts shown when the plugin is enabled (server URL, API
-   key, account, user). Every answer is optional, and the key is kept in Claude Code's credential
-   store. Change them later in `/plugin`.
-3. `~/.openviking/ovcli.conf`.
-4. Nothing configured: `http://127.0.0.1:1933` without a key, which suits a server on the same machine.
+2. `~/.openviking/ovcli.conf`.
+3. The `server` section of `~/.openviking/ov.conf`, the server's own configuration, on the machine that
+   runs the server.
+4. Nothing configured: Codex uses `http://127.0.0.1:1933` without a key. Claude Code keeps the plugin
+   off.
 
-If you use both hosts, leave the Claude Code prompts empty and keep everything in `ovcli.conf`.
-Otherwise the two hosts read the connection from different places, and a change to one does not reach
-the other.
+Claude Code turns the plugin on only when `ovcli.conf` or `ov.conf` exists, or when
+`OPENVIKING_MEMORY_ENABLED=1` is set. With the connection in environment variables alone, set that
+variable too.
 
 ## Tuning
 
@@ -52,13 +52,13 @@ Behaviour settings go under `plugin` in the same file:
 
 Keys directly under `plugin` apply to both hosts. `plugin.codex` applies under Codex only and
 `plugin.claude_code` under Claude Code only; each overrides the shared value. The
-[openviking-memory README](https://github.com/purisev/openviking-memory#configuration) lists the keys.
+[OpenViking client configuration](https://github.com/volcengine/OpenViking/blob/v0.5.5/docs/en/configuration/02-client.md#plugin-settings) lists the keys.
 
-A repository can carry its own settings in `.openviking/config.json`; see the same README.
+A repository can carry its own settings in `.openviking/config.json`; see
+[workspace configuration](https://github.com/volcengine/OpenViking/blob/v0.5.5/docs/en/configuration/02-client.md#workspace-configuration).
 
 ## Check it
 
 Ask the agent to run the `ov-memory-doctor` skill. Its Configuration section names the source of every
-value (`← ~/.openviking/ovcli.conf`, `← env`, `← Claude Code plugin option`) and its Connection section
-proves the key against the server: `/health` answers 200 even with a wrong key, so reachability alone
-proves nothing.
+value (`← ~/.openviking/ovcli.conf`, `← env`) and its Connection section proves the key against the
+server: `/health` answers 200 even with a wrong key, so reachability alone proves nothing.
