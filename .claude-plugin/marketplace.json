@@ -17,7 +17,8 @@
         "source": "git-subdir",
         "url": "https://github.com/volcengine/OpenViking.git",
         "path": "examples/claude-code-memory-plugin",
-        "ref": "v0.5.5"
+        "ref": "v0.5.5",
+        "sha": "4f4b09c8b81cc52cc0361ec7d9f189ce0ccda35b"
       },
       "homepage": "https://github.com/volcengine/OpenViking/tree/v0.5.5/examples/claude-code-memory-plugin",
       "category": "productivity",
@@ -40,6 +41,86 @@
         "wiki",
         "openviking",
         "knowledge-base"
+      ]
+    },
+    {
+      "name": "humanizer",
+      "description": "Rewrite AI-sounding text so it reads like the writer without changing what it says. Third-party: blader/humanizer, pinned to a release.",
+      "source": {
+        "source": "github",
+        "repo": "blader/humanizer",
+        "ref": "v4.0.0",
+        "sha": "b48c832f0f809c1b5658edbb838c2521b72f2413"
+      },
+      "homepage": "https://github.com/blader/humanizer",
+      "category": "productivity",
+      "keywords": [
+        "writing",
+        "editing",
+        "prose"
+      ]
+    },
+    {
+      "name": "ponytail",
+      "description": "Lazy senior dev mode: the smallest change that fully solves the task. Hooks turn it on in every session and subagent. Third-party: DietrichGebert/ponytail, pinned to a release.",
+      "source": {
+        "source": "github",
+        "repo": "DietrichGebert/ponytail",
+        "ref": "v5.3.3",
+        "sha": "7801d061243d7b753bad0e0b3c057cd250b11755"
+      },
+      "homepage": "https://github.com/DietrichGebert/ponytail",
+      "category": "productivity",
+      "keywords": [
+        "yagni",
+        "minimalism",
+        "code-review"
+      ]
+    },
+    {
+      "name": "infra",
+      "description": "Skills for infrastructure CLIs: Ansible, Helm, Terraform in preflight mode, Terramate templating and VictoriaMetrics MetricsQL.",
+      "source": {
+        "source": "git-subdir",
+        "url": "https://github.com/purisev/agent-skills.git",
+        "path": "infra"
+      },
+      "homepage": "https://github.com/purisev/agent-skills/tree/main/infra",
+      "category": "productivity",
+      "keywords": [
+        "ansible",
+        "helm",
+        "terraform",
+        "terramate",
+        "metricsql"
+      ]
+    },
+    {
+      "name": "playwright",
+      "description": "Write, debug and run Playwright browser tests, drive a browser through Playwright MCP, and extract data from JS-rendered pages. Third-party: Clawic's Playwright skill, pinned to a commit.",
+      "version": "1.0.4",
+      "author": {
+        "name": "Ivan G. Davila (Clawic)",
+        "url": "https://clawic.com/skills/playwright"
+      },
+      "license": "MIT",
+      "skills": [
+        "./"
+      ],
+      "source": {
+        "source": "git-subdir",
+        "url": "https://github.com/clawic/skills.git",
+        "path": "skills/playwright",
+        "ref": "main",
+        "sha": "f825206afbf1c697202533a9187be68c7b697e0e"
+      },
+      "homepage": "https://clawic.com/skills/playwright",
+      "category": "productivity",
+      "keywords": [
+        "playwright",
+        "browser",
+        "testing",
+        "scraping"
       ]
     }
   ]

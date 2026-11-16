@@ -59,6 +59,73 @@ Two offline helpers, `wiki_validate.py` and `wiki_plan.py`, are optional. They n
 PyYAML; `uv run` resolves that from the scripts' headers. Without them the agent runs the same checks
 through the tools.
 
+## humanizer
+
+Source: [blader/humanizer](https://github.com/blader/humanizer), release **v4.0.0**, by Siqi Chen. MIT.
+Claude Code installs it from that repository; Codex installs a copy of the same commit from
+[purisev/agent-skills](https://github.com/purisev/agent-skills/tree/main/humanizer), because Codex
+does not find a skill kept at the root of a repository.
+
+One skill, `humanizer`: rewrites text so it reads like its writer, removing AI writing patterns such
+as forced triads, staged openers, inflated claims and stock AI words, without changing what it says.
+
+If you installed it earlier from its author's marketplace, remove that copy, or the skill appears
+twice: `claude plugin uninstall humanizer@humanizer` and `claude plugin marketplace remove humanizer`.
+
+## ponytail
+
+Source: [DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail), release **v5.3.3**, by
+Dietrich Gebert. MIT. Both hosts install it from that repository.
+
+"Lazy senior dev mode": steers the agent towards the smallest change that fully solves the task —
+YAGNI, the standard library first, no abstractions nobody asked for.
+
+- **Hooks** at session start, at subagent start and on every prompt turn the mode on in every session
+  and every subagent, at level `full`. `PONYTAIL_DEFAULT_MODE=off` in the host's environment, or
+  `defaultMode` in `~/.config/ponytail/config.json`, changes the default.
+- **Skills**: `ponytail`, `ponytail-review`, `ponytail-audit`, `ponytail-debt`, `ponytail-gain`,
+  `ponytail-help`.
+- **Task board** (Claude Code): after every turn it appends a row to
+  `~/.config/ponytail/band/<project>.csv`. A webhook can receive the same row; it is off until you set
+  its URL in the plugin's options. Nothing leaves the machine without it.
+
+Needs `node` on `PATH` for its hooks; without it the skills still work. Codex asks to approve its hooks
+once (`/hooks`).
+
+## infra
+
+Source: [purisev/agent-skills](https://github.com/purisev/agent-skills/tree/main/infra).
+
+Skills for infrastructure command-line tools. They work through the tools' own CLIs, which must be
+installed, and prefer checks and previews to changes.
+
+| Skill | Covers |
+| --- | --- |
+| `ansible` | Inventories, playbooks, roles, check and diff runs, collections, Vault. |
+| `helm` | Charts and releases: render, lint, package, install, upgrade, rollback, OCI registries. |
+| `metricsql` | VictoriaMetrics MetricsQL queries for dashboards, alerts and recording rules. |
+| `terraform` | Authoring, `fmt`, `validate`, speculative `plan`, read-only state. Never `apply`, `destroy` or state changes. |
+| `terramate` | Terramate templating and code generation: `generate_hcl`, globals, `tm_*` functions. |
+
+## playwright
+
+Source: [Clawic's Playwright skill](https://clawic.com/skills/playwright) by Ivan G. Davila, version
+**1.0.4**, from [clawic/skills](https://github.com/clawic/skills/tree/main/skills/playwright) pinned to a
+commit. MIT. Claude Code installs it from that repository, where the skill is listed as
+`playwright:Playwright--Automation---MCP---Scraper-`; Codex installs a copy of the same commit from
+[purisev/agent-skills](https://github.com/purisev/agent-skills/tree/main/playwright), where it is
+`playwright:playwright`.
+
+Writes and repairs Playwright tests, diagnoses flaky and CI-only failures, drives a live browser
+through Playwright MCP and extracts data from JS-rendered pages. Needs Node.js and `npx`; Playwright
+and `@playwright/mcp` are installed on first use. The skill keeps its own preferences in
+`~/Clawic/data/playwright/`.
+
+## Third-party plugins
+
+`humanizer`, `ponytail` and `playwright` come from repositories purisev does not maintain. Each is
+pinned to one commit in both catalogs, so an update reaches you only when the pin here changes.
+
 ## Platforms
 
 | | Linux | macOS | Windows |
