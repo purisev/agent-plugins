@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-d5332a48.js";
+            window.path_to_searchindex_js = "searchindex-db10e07c.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-eefae25e.js"></script>
@@ -235,6 +235,7 @@ sh install.sh
 <tr><td><code>--host claude</code></td><td><code>-AgentHost claude</code></td><td>Install into this host only (<code>claude</code> or <code>codex</code>). Repeatable.</td></tr>
 <tr><td><code>--plugin openviking-memory</code></td><td><code>-Plugin openviking-memory</code></td><td>Install this plugin only. Repeatable.</td></tr>
 <tr><td><code>--no-config</code></td><td><code>-NoConfig</code></td><td>Do not offer to create the connection file.</td></tr>
+<tr><td><code>--remove-duplicates</code></td><td><code>-RemoveDuplicates</code></td><td>Remove other copies of these plugins and loose copies of their skills; see <a href="#every-hook-runs-twice-or-a-skill-is-listed-twice">Troubleshooting</a>. Without it they are only listed.</td></tr>
 <tr><td><code>-y</code>, <code>--yes</code></td><td><code>-Yes</code></td><td>Answer yes to every question. Nothing is asked, so the connection file is not created.</td></tr>
 <tr><td><code>--dry-run</code></td><td><code>-DryRun</code></td><td>Print what would be done and change nothing.</td></tr>
 </tbody>
@@ -374,8 +375,8 @@ Claude Code installs it from that repository; Codex installs a copy of the same 
 does not find a skill kept at the root of a repository.</p>
 <p>One skill, <code>humanizer</code>: rewrites text so it reads like its writer, removing AI writing patterns such
 as forced triads, staged openers, inflated claims and stock AI words, without changing what it says.</p>
-<p>If you installed it earlier from its author’s marketplace, remove that copy, or the skill appears
-twice: <code>claude plugin uninstall humanizer@humanizer</code> and <code>claude plugin marketplace remove humanizer</code>.</p>
+<p>If you installed it earlier from its author’s marketplace, the skill appears twice until that copy
+goes; the installer’s <code>--remove-duplicates</code> removes it.</p>
 <h2 id="ponytail"><a class="header" href="#ponytail">ponytail</a></h2>
 <p>Source: <a href="https://github.com/DietrichGebert/ponytail">DietrichGebert/ponytail</a>, release <strong>v5.3.3</strong>, by
 Dietrich Gebert. MIT. Both hosts install it from that repository.</p>
@@ -473,16 +474,26 @@ codex plugin marketplace upgrade purisev &amp;&amp; codex plugin add openviking-
 </code></pre>
 <p>Restart the host afterwards. Codex asks to approve the new hooks once (<code>/hooks</code>). Keys the fork read,
 such as <code>plugin.codex.serverAutoCommit</code>, are ignored and can be removed from <code>ovcli.conf</code>.</p>
-<h2 id="every-hook-runs-twice"><a class="header" href="#every-hook-runs-twice">Every hook runs twice</a></h2>
-<p>The same plugin is enabled from two marketplaces — typically <code>openviking-memory@purisev</code> next to an
-earlier <code>openviking-memory@openviking-memory</code>. The doctor reports “more than one openviking plugin is
-enabled”. Remove the old one:</p>
-<pre><code class="language-sh">claude plugin uninstall openviking-memory@openviking-memory
-claude plugin marketplace remove openviking-memory
+<h2 id="every-hook-runs-twice-or-a-skill-is-listed-twice"><a class="header" href="#every-hook-runs-twice-or-a-skill-is-listed-twice">Every hook runs twice, or a skill is listed twice</a></h2>
+<p>The same plugin is enabled from two marketplaces, or a skill a plugin ships also sits loose in a skills
+directory. The installer lists both kinds at the end of every run, and removes them when run with
+<code>--remove-duplicates</code> (<code>-RemoveDuplicates</code> on Windows):</p>
+<pre><code class="language-sh">curl -fsSL https://ai-plugins.purisev.com/install.sh | sh -s -- --remove-duplicates
 </code></pre>
-<p>Third-party plugins have marketplaces of their own too. If you installed <code>humanizer</code> or <code>ponytail</code> from
-them before, remove those copies the same way: <code>humanizer@humanizer</code> and the <code>humanizer</code> marketplace,
-<code>ponytail@ponytail</code> and the <code>ponytail</code> marketplace.</p>
+<ul>
+<li><strong>Another copy of a plugin</strong>: a plugin with the name of a purisev plugin, installed from another
+marketplace out of the same repository, such as <code>humanizer@humanizer</code> from its author’s marketplace.
+It is uninstalled, and its marketplace removed once nothing else is installed from it. A plugin that
+only shares the name, coming from a different repository, is left alone.</li>
+<li><strong>A loose copy of a skill</strong>: a directory in <code>~/.claude/skills</code>, <code>~/.codex/skills</code> or <code>~/.agents/skills</code>
+named like a skill a purisev plugin ships, such as <code>~/.claude/skills/helm</code> next to <code>infra</code>. It moves
+to <code>&lt;skills directory&gt;.replaced/&lt;date-time&gt;/</code>, from where you can restore it.</li>
+</ul>
+<p>Each removal asks first, unless <code>--yes</code> is given; <code>--dry-run</code> prints them and changes nothing. Looking
+for duplicates needs <code>node</code>.</p>
+<p>By hand, for a plugin: <code>claude plugin uninstall &lt;plugin&gt;@&lt;marketplace&gt;</code>, then
+<code>claude plugin marketplace remove &lt;marketplace&gt;</code>; under Codex, <code>codex plugin remove</code> and
+<code>codex plugin marketplace remove</code>.</p>
 <h2 id="recall-is-empty-captures-do-not-land"><a class="header" href="#recall-is-empty-captures-do-not-land">Recall is empty, captures do not land</a></h2>
 <ul>
 <li><strong>The key is wrong.</strong> <code>/health</code> answers 200 regardless, so look at the doctor’s “credentials accepted”
