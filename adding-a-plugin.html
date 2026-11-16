@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-bd6411cf.js";
+            window.path_to_searchindex_js = "searchindex-d5332a48.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-eefae25e.js"></script>
@@ -181,19 +181,22 @@
                 <div id="mdbook-content" class="content">
                     <main>
                         <h1 id="adding-a-plugin"><a class="header" href="#adding-a-plugin">Adding a plugin</a></h1>
-<p>Each plugin lives in its own repository, which holds its code, reference documentation and issues.
-<a href="https://github.com/purisev/agent-plugins">purisev/agent-plugins</a> holds the two catalogs, the installer
-and this site. <code>openviking-memory</code> is the exception: both catalogs take the official plugin from a
-subdirectory of the OpenViking repository through a <code>git-subdir</code> source pinned to a release tag.</p>
+<p>A plugin purisev maintains lives in its own repository, such as
+<a href="https://github.com/purisev/openviking-wiki">purisev/openviking-wiki</a>, or as a directory of
+<a href="https://github.com/purisev/agent-skills">purisev/agent-skills</a>, which suits plugins made only of
+skills. <a href="https://github.com/purisev/agent-plugins">purisev/agent-plugins</a> holds the two catalogs, the
+installer and this site. Plugins from other authors follow <a href="#third-party-plugins">Third-party plugins</a>.</p>
 <ol>
 <li>Give the plugin repository a <code>.claude-plugin/plugin.json</code> with a <code>name</code> and a <code>version</code>, and check it
 with <code>claude plugin validate &lt;checkout&gt;/.claude-plugin/plugin.json</code>. For Codex it also needs a
 <code>.codex-plugin/plugin.json</code>.</li>
 <li>Add an entry with the same <code>name</code> to both catalogs:
 <ul>
-<li><code>.claude-plugin/marketplace.json</code> — a <code>github</code> source;</li>
-<li><code>.agents/plugins/marketplace.json</code> — a <code>url</code> source for the same repository, and a <code>policy</code>.
-Codex has no <code>github</code> source type and lists nothing from the first file.</li>
+<li><code>.claude-plugin/marketplace.json</code> — a <code>github</code> source, or a <code>git-subdir</code> source for a directory of
+purisev/agent-skills, with no <code>ref</code>, so it follows the default branch;</li>
+<li><code>.agents/plugins/marketplace.json</code> — a <code>url</code> or <code>git-subdir</code> source for the same place with
+<code>"ref": "main"</code>, and a <code>policy</code>. Codex has no <code>github</code> source type and lists nothing from the
+first file.</li>
 </ul>
 </li>
 <li>A plugin that needs another plugin from this catalog lists it under <code>dependencies</code> in its
@@ -205,7 +208,24 @@ it automatically.</li>
 </ol>
 <p>Do not give a plugin repository a <code>marketplace.json</code> of its own. The same plugin reachable through two
 marketplaces can be enabled twice, and its hooks then run twice.</p>
-<p>Claude Code tells plugin versions apart by <code>version</code> in <code>plugin.json</code>, so raise it with every release.
+<p>Claude Code tells plugin versions apart by <code>version</code> in <code>plugin.json</code>, so raise it with every release.</p>
+<h2 id="third-party-plugins"><a class="header" href="#third-party-plugins">Third-party plugins</a></h2>
+<p>A plugin from another author is listed from its own repository and pinned to one commit, so an install
+never follows someone else’s branch:</p>
+<ul>
+<li><strong>Claude Code</strong>: a <code>github</code>, <code>url</code> or <code>git-subdir</code> source with <code>ref</code> (the release tag, or the branch
+when there are no releases) and <code>sha</code> (the full commit). A source without <code>.claude-plugin/plugin.json</code>
+needs no wrapper: the catalog entry is then its manifest, so give it <code>description</code>, <code>version</code>,
+<code>author</code>, <code>license</code> and <code>skills</code>, as the <code>playwright</code> entry does.</li>
+<li><strong>Codex</strong>: the same repository, <code>ref</code> and <code>sha</code>, when the source has a manifest Codex reads and its
+skills under <code>skills/</code>. Otherwise Codex installs the plugin empty, without an error. Such a plugin
+gets a Codex-only copy in purisev/agent-skills, whose README describes the layout, and joins
+<code>CODEX_WRAPPERS</code> in <code>marketplace.test.mjs</code>.</li>
+</ul>
+<p>An install that succeeds does not prove that Codex found the skills. <code>codex debug prompt-input hi</code>
+prints the prompt Codex would send, and its skills section lists every skill it loaded.</p>
+<p>To move a third-party plugin to a new release, change <code>ref</code> and <code>sha</code> in both catalogs, and for a
+wrapper follow the update steps in the purisev/agent-skills README.
 Hooks shared by both hosts use <code>${CLAUDE_PLUGIN_ROOT}</code> in their commands: Claude Code expands only that
 token, and Codex provides it next to its own <code>${PLUGIN_ROOT}</code>.</p>
 <h2 id="checks"><a class="header" href="#checks">Checks</a></h2>

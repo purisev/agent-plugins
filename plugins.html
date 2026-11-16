@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-bd6411cf.js";
+            window.path_to_searchindex_js = "searchindex-d5332a48.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-eefae25e.js"></script>
@@ -235,6 +235,64 @@ installs that plugin automatically as a declared dependency; under Codex install
 <p>Two offline helpers, <code>wiki_validate.py</code> and <code>wiki_plan.py</code>, are optional. They need Python 3 with
 PyYAML; <code>uv run</code> resolves that from the scripts’ headers. Without them the agent runs the same checks
 through the tools.</p>
+<h2 id="humanizer"><a class="header" href="#humanizer">humanizer</a></h2>
+<p>Source: <a href="https://github.com/blader/humanizer">blader/humanizer</a>, release <strong>v4.0.0</strong>, by Siqi Chen. MIT.
+Claude Code installs it from that repository; Codex installs a copy of the same commit from
+<a href="https://github.com/purisev/agent-skills/tree/main/humanizer">purisev/agent-skills</a>, because Codex
+does not find a skill kept at the root of a repository.</p>
+<p>One skill, <code>humanizer</code>: rewrites text so it reads like its writer, removing AI writing patterns such
+as forced triads, staged openers, inflated claims and stock AI words, without changing what it says.</p>
+<p>If you installed it earlier from its author’s marketplace, remove that copy, or the skill appears
+twice: <code>claude plugin uninstall humanizer@humanizer</code> and <code>claude plugin marketplace remove humanizer</code>.</p>
+<h2 id="ponytail"><a class="header" href="#ponytail">ponytail</a></h2>
+<p>Source: <a href="https://github.com/DietrichGebert/ponytail">DietrichGebert/ponytail</a>, release <strong>v5.3.3</strong>, by
+Dietrich Gebert. MIT. Both hosts install it from that repository.</p>
+<p>“Lazy senior dev mode”: steers the agent towards the smallest change that fully solves the task —
+YAGNI, the standard library first, no abstractions nobody asked for.</p>
+<ul>
+<li><strong>Hooks</strong> at session start, at subagent start and on every prompt turn the mode on in every session
+and every subagent, at level <code>full</code>. <code>PONYTAIL_DEFAULT_MODE=off</code> in the host’s environment, or
+<code>defaultMode</code> in <code>~/.config/ponytail/config.json</code>, changes the default.</li>
+<li><strong>Skills</strong>: <code>ponytail</code>, <code>ponytail-review</code>, <code>ponytail-audit</code>, <code>ponytail-debt</code>, <code>ponytail-gain</code>,
+<code>ponytail-help</code>.</li>
+<li><strong>Task board</strong> (Claude Code): after every turn it appends a row to
+<code>~/.config/ponytail/band/&lt;project&gt;.csv</code>. A webhook can receive the same row; it is off until you set
+its URL in the plugin’s options. Nothing leaves the machine without it.</li>
+</ul>
+<p>Needs <code>node</code> on <code>PATH</code> for its hooks; without it the skills still work. Codex asks to approve its hooks
+once (<code>/hooks</code>).</p>
+<h2 id="infra"><a class="header" href="#infra">infra</a></h2>
+<p>Source: <a href="https://github.com/purisev/agent-skills/tree/main/infra">purisev/agent-skills</a>.</p>
+<p>Skills for infrastructure command-line tools. They work through the tools’ own CLIs, which must be
+installed, and prefer checks and previews to changes.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Skill</th><th>Covers</th></tr>
+</thead>
+<tbody>
+<tr><td><code>ansible</code></td><td>Inventories, playbooks, roles, check and diff runs, collections, Vault.</td></tr>
+<tr><td><code>helm</code></td><td>Charts and releases: render, lint, package, install, upgrade, rollback, OCI registries.</td></tr>
+<tr><td><code>metricsql</code></td><td>VictoriaMetrics MetricsQL queries for dashboards, alerts and recording rules.</td></tr>
+<tr><td><code>terraform</code></td><td>Authoring, <code>fmt</code>, <code>validate</code>, speculative <code>plan</code>, read-only state. Never <code>apply</code>, <code>destroy</code> or state changes.</td></tr>
+<tr><td><code>terramate</code></td><td>Terramate templating and code generation: <code>generate_hcl</code>, globals, <code>tm_*</code> functions.</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="playwright"><a class="header" href="#playwright">playwright</a></h2>
+<p>Source: <a href="https://clawic.com/skills/playwright">Clawic’s Playwright skill</a> by Ivan G. Davila, version
+<strong>1.0.4</strong>, from <a href="https://github.com/clawic/skills/tree/main/skills/playwright">clawic/skills</a> pinned to a
+commit. MIT. Claude Code installs it from that repository, where the skill is listed as
+<code>playwright:Playwright--Automation---MCP---Scraper-</code>; Codex installs a copy of the same commit from
+<a href="https://github.com/purisev/agent-skills/tree/main/playwright">purisev/agent-skills</a>, where it is
+<code>playwright:playwright</code>.</p>
+<p>Writes and repairs Playwright tests, diagnoses flaky and CI-only failures, drives a live browser
+through Playwright MCP and extracts data from JS-rendered pages. Needs Node.js and <code>npx</code>; Playwright
+and <code>@playwright/mcp</code> are installed on first use. The skill keeps its own preferences in
+<code>~/Clawic/data/playwright/</code>.</p>
+<h2 id="third-party-plugins"><a class="header" href="#third-party-plugins">Third-party plugins</a></h2>
+<p><code>humanizer</code>, <code>ponytail</code> and <code>playwright</code> come from repositories purisev does not maintain. Each is
+pinned to one commit in both catalogs, so an update reaches you only when the pin here changes.</p>
 <h2 id="platforms"><a class="header" href="#platforms">Platforms</a></h2>
 <div class="table-wrapper">
 <table>

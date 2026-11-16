@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-bd6411cf.js";
+            window.path_to_searchindex_js = "searchindex-d5332a48.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-eefae25e.js"></script>
@@ -192,6 +192,10 @@ published as one marketplace named <code>purisev</code>. An installed plugin has
 <tbody>
 <tr><td><a href="plugins.html#openviking-memory"><code>openviking-memory</code></a></td><td>Long-term semantic memory backed by an <a href="https://github.com/volcengine/OpenViking">OpenViking</a> server, plus OpenViking’s tools for the agent.</td></tr>
 <tr><td><a href="plugins.html#ov-wiki"><code>ov-wiki</code></a></td><td>An agent-authored Markdown wiki stored in OpenViking.</td></tr>
+<tr><td><a href="plugins.html#humanizer"><code>humanizer</code></a></td><td>Rewrites AI-sounding text so it reads like the writer.</td></tr>
+<tr><td><a href="plugins.html#ponytail"><code>ponytail</code></a></td><td>Steers the agent towards the smallest change that solves the task.</td></tr>
+<tr><td><a href="plugins.html#infra"><code>infra</code></a></td><td>Skills for Ansible, Helm, Terraform, Terramate and MetricsQL.</td></tr>
+<tr><td><a href="plugins.html#playwright"><code>playwright</code></a></td><td>Browser tests, automation and scraping with Playwright.</td></tr>
 </tbody>
 </table>
 </div>
@@ -204,9 +208,9 @@ published as one marketplace named <code>purisev</code>. An installed plugin has
 </code></pre>
 <p>The installer:</p>
 <ol>
-<li>checks for <code>git</code> and for Node.js 18 or newer, which <code>openviking-memory</code> runs on. When Node.js is
-missing it offers the official build, checksum-verified, under your home directory — no root or
-administrator rights, and nothing is installed without a yes;</li>
+<li>checks for <code>git</code> and for Node.js 18 or newer, which the hooks of <code>openviking-memory</code> and <code>ponytail</code>
+run on. When Node.js is missing it offers the official build, checksum-verified, under your home
+directory — no root or administrator rights, and nothing is installed without a yes;</li>
 <li>finds Claude Code and Codex on <code>PATH</code>, adds the <code>purisev</code> marketplace to each, and installs or
 updates the plugins;</li>
 <li>offers to create <code>~/.openviking/ovcli.conf</code> when there is none, and leaves an existing one alone.</li>
@@ -251,8 +255,9 @@ sh install.sh
 codex plugin add openviking-memory@purisev
 codex plugin add ov-wiki@purisev
 </code></pre>
-<p>Then start <code>codex</code>, run <code>/hooks</code>, and approve the hooks <code>openviking-memory</code> brings. Codex asks once,
-and again whenever a plugin update changes them.</p>
+<p>The other plugins install the same way, as <code>codex plugin add &lt;plugin&gt;@purisev</code>. Then start <code>codex</code>,
+run <code>/hooks</code>, and approve the hooks <code>openviking-memory</code> and <code>ponytail</code> bring. Codex asks once, and again
+whenever a plugin update changes them.</p>
 <h2 id="after-installing"><a class="header" href="#after-installing">After installing</a></h2>
 <p>Restart the host, then <a href="connection.html">connect it to your OpenViking server</a>. To check the result, ask
 the agent to run the <code>ov-memory-doctor</code> skill; <a href="troubleshooting.html">Troubleshooting</a> explains its report.</p>
