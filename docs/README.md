@@ -62,6 +62,7 @@ irm https://ai-plugins.purisev.com/install.ps1 -OutFile install.ps1
 | `--host claude` | `-AgentHost claude` | Install into this host only (`claude` or `codex`). Repeatable. |
 | `--plugin openviking-memory` | `-Plugin openviking-memory` | Install this plugin only. Repeatable. |
 | `--no-config` | `-NoConfig` | Do not offer to create the connection file. |
+| `--remove-duplicates` | `-RemoveDuplicates` | Remove other copies of these plugins and loose copies of their skills; see [Troubleshooting](troubleshooting.md#every-hook-runs-twice-or-a-skill-is-listed-twice). Without it they are only listed. |
 | `-y`, `--yes` | `-Yes` | Answer yes to every question. Nothing is asked, so the connection file is not created. |
 | `--dry-run` | `-DryRun` | Print what would be done and change nothing. |
 

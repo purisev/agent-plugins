@@ -42,20 +42,30 @@ codex plugin marketplace upgrade purisev && codex plugin add openviking-memory@p
 Restart the host afterwards. Codex asks to approve the new hooks once (`/hooks`). Keys the fork read,
 such as `plugin.codex.serverAutoCommit`, are ignored and can be removed from `ovcli.conf`.
 
-## Every hook runs twice
+## Every hook runs twice, or a skill is listed twice
 
-The same plugin is enabled from two marketplaces — typically `openviking-memory@purisev` next to an
-earlier `openviking-memory@openviking-memory`. The doctor reports "more than one openviking plugin is
-enabled". Remove the old one:
+The same plugin is enabled from two marketplaces, or a skill a plugin ships also sits loose in a skills
+directory. The installer lists both kinds at the end of every run, and removes them when run with
+`--remove-duplicates` (`-RemoveDuplicates` on Windows):
 
 ```sh
-claude plugin uninstall openviking-memory@openviking-memory
-claude plugin marketplace remove openviking-memory
+curl -fsSL https://ai-plugins.purisev.com/install.sh | sh -s -- --remove-duplicates
 ```
 
-Third-party plugins have marketplaces of their own too. If you installed `humanizer` or `ponytail` from
-them before, remove those copies the same way: `humanizer@humanizer` and the `humanizer` marketplace,
-`ponytail@ponytail` and the `ponytail` marketplace.
+- **Another copy of a plugin**: a plugin with the name of a purisev plugin, installed from another
+  marketplace out of the same repository, such as `humanizer@humanizer` from its author's marketplace.
+  It is uninstalled, and its marketplace removed once nothing else is installed from it. A plugin that
+  only shares the name, coming from a different repository, is left alone.
+- **A loose copy of a skill**: a directory in `~/.claude/skills`, `~/.codex/skills` or `~/.agents/skills`
+  named like a skill a purisev plugin ships, such as `~/.claude/skills/helm` next to `infra`. It moves
+  to `<skills directory>.replaced/<date-time>/`, from where you can restore it.
+
+Each removal asks first, unless `--yes` is given; `--dry-run` prints them and changes nothing. Looking
+for duplicates needs `node`.
+
+By hand, for a plugin: `claude plugin uninstall <plugin>@<marketplace>`, then
+`claude plugin marketplace remove <marketplace>`; under Codex, `codex plugin remove` and
+`codex plugin marketplace remove`.
 
 ## Recall is empty, captures do not land
 
