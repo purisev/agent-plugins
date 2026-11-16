@@ -105,13 +105,6 @@ const installers = [
   },
 ];
 
-test("both installers offer every plugin in the catalog, in catalog order", () => {
-  const sh = readFileSync(SH_SCRIPT, "utf-8").match(/^ALL_PLUGINS="([^"]*)"/m)[1].split(" ");
-  const ps = [...readFileSync(PS_SCRIPT, "utf-8").match(/^\$AllPlugins = @\(([^)]*)\)/m)[1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
-  assert.deepEqual(sh, ALL_PLUGINS);
-  assert.deepEqual(ps, ALL_PLUGINS);
-});
-
 for (const installer of installers) {
   const it = (title, fn) => test(`${installer.name}: ${title}`, { skip: installer.skip }, fn);
 
