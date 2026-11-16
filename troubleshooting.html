@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-fa98f0ad.js";
+            window.path_to_searchindex_js = "searchindex-bd6411cf.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-eefae25e.js"></script>
@@ -205,10 +205,18 @@ hooks needs approval again; the doctor lists the hooks that have no trust record
 <li><strong>The plugin is disabled</strong>, or Claude Code disabled it over a missing dependency. <code>claude plugin list</code>
 shows the state and the reason.</li>
 </ul>
+<h2 id="moving-from-the-fork-to-the-upstream-plugin"><a class="header" href="#moving-from-the-fork-to-the-upstream-plugin">Moving from the fork to the upstream plugin</a></h2>
+<p><code>openviking-memory@purisev</code> used to come from the fork <code>purisev/openviking-memory</code>. It now comes from
+the official OpenViking repository. Refresh the marketplace and update the plugin:</p>
+<pre><code class="language-sh">claude plugin marketplace update purisev &amp;&amp; claude plugin update openviking-memory@purisev
+codex plugin marketplace upgrade purisev &amp;&amp; codex plugin add openviking-memory@purisev
+</code></pre>
+<p>Restart the host afterwards. Codex asks to approve the new hooks once (<code>/hooks</code>). Keys the fork read,
+such as <code>plugin.codex.serverAutoCommit</code>, are ignored and can be removed from <code>ovcli.conf</code>.</p>
 <h2 id="every-hook-runs-twice"><a class="header" href="#every-hook-runs-twice">Every hook runs twice</a></h2>
 <p>The same plugin is enabled from two marketplaces — typically <code>openviking-memory@purisev</code> next to an
-earlier <code>openviking-memory@openviking-memory</code>. The doctor reports “more than one copy”. Remove the old
-one:</p>
+earlier <code>openviking-memory@openviking-memory</code>. The doctor reports “more than one openviking plugin is
+enabled”. Remove the old one:</p>
 <pre><code class="language-sh">claude plugin uninstall openviking-memory@openviking-memory
 claude plugin marketplace remove openviking-memory
 </code></pre>
@@ -223,11 +231,6 @@ line, not at reachability.</li>
 <li><strong>The server cannot reach its embedding provider.</strong> The doctor’s Server health section shows <code>/ready</code>
 per subsystem; the fix is on the server.</li>
 </ul>
-<h2 id="the-doctor-says-no-usable-config-but-memory-works"><a class="header" href="#the-doctor-says-no-usable-config-but-memory-works">The doctor says “no usable config” but memory works</a></h2>
-<p>Under Claude Code the connection may have been entered at the plugin’s prompts. Claude Code hands those
-answers to hooks and MCP servers, not to a shell, and keeps the key in its own credential store. The
-doctor reads the non-sensitive answers from Claude Code’s settings and says so; for its authenticated
-checks, run it with <code>OPENVIKING_API_KEY</code> set in that shell.</p>
 <h2 id="404-on-profilemd-preferences-entities-in-the-server-log"><a class="header" href="#404-on-profilemd-preferences-entities-in-the-server-log"><code>404</code> on <code>profile.md</code>, <code>preferences</code>, <code>entities</code> in the server log</a></h2>
 <p>Expected for a new user. At session start the plugin looks for your profile and memory indexes, and the
 server creates those only when it first extracts something to put there. The plugin treats the 404 as

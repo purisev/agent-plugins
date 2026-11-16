@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-fa98f0ad.js";
+            window.path_to_searchindex_js = "searchindex-bd6411cf.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-eefae25e.js"></script>
@@ -183,7 +183,8 @@
                         <h1 id="adding-a-plugin"><a class="header" href="#adding-a-plugin">Adding a plugin</a></h1>
 <p>Each plugin lives in its own repository, which holds its code, reference documentation and issues.
 <a href="https://github.com/purisev/agent-plugins">purisev/agent-plugins</a> holds the two catalogs, the installer
-and this site.</p>
+and this site. <code>openviking-memory</code> is the exception: both catalogs take the official plugin from a
+subdirectory of the OpenViking repository through a <code>git-subdir</code> source pinned to a release tag.</p>
 <ol>
 <li>Give the plugin repository a <code>.claude-plugin/plugin.json</code> with a <code>name</code> and a <code>version</code>, and check it
 with <code>claude plugin validate &lt;checkout&gt;/.claude-plugin/plugin.json</code>. For Codex it also needs a

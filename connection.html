@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-fa98f0ad.js";
+            window.path_to_searchindex_js = "searchindex-bd6411cf.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-eefae25e.js"></script>
@@ -201,15 +201,15 @@ API-key server, leave them out: the key already carries the identity.</li>
 <ol>
 <li><code>OPENVIKING_URL</code>, <code>OPENVIKING_API_KEY</code>, <code>OPENVIKING_ACCOUNT</code>, <code>OPENVIKING_USER</code> in the environment
 that launches the host.</li>
-<li>Under Claude Code only: the answers to the prompts shown when the plugin is enabled (server URL, API
-key, account, user). Every answer is optional, and the key is kept in Claude Code’s credential
-store. Change them later in <code>/plugin</code>.</li>
 <li><code>~/.openviking/ovcli.conf</code>.</li>
-<li>Nothing configured: <code>http://127.0.0.1:1933</code> without a key, which suits a server on the same machine.</li>
+<li>The <code>server</code> section of <code>~/.openviking/ov.conf</code>, the server’s own configuration, on the machine that
+runs the server.</li>
+<li>Nothing configured: Codex uses <code>http://127.0.0.1:1933</code> without a key. Claude Code keeps the plugin
+off.</li>
 </ol>
-<p>If you use both hosts, leave the Claude Code prompts empty and keep everything in <code>ovcli.conf</code>.
-Otherwise the two hosts read the connection from different places, and a change to one does not reach
-the other.</p>
+<p>Claude Code turns the plugin on only when <code>ovcli.conf</code> or <code>ov.conf</code> exists, or when
+<code>OPENVIKING_MEMORY_ENABLED=1</code> is set. With the connection in environment variables alone, set that
+variable too.</p>
 <h2 id="tuning"><a class="header" href="#tuning">Tuning</a></h2>
 <p>Behaviour settings go under <code>plugin</code> in the same file:</p>
 <pre><code class="language-json">{
@@ -224,13 +224,13 @@ the other.</p>
 </code></pre>
 <p>Keys directly under <code>plugin</code> apply to both hosts. <code>plugin.codex</code> applies under Codex only and
 <code>plugin.claude_code</code> under Claude Code only; each overrides the shared value. The
-<a href="https://github.com/purisev/openviking-memory#configuration">openviking-memory README</a> lists the keys.</p>
-<p>A repository can carry its own settings in <code>.openviking/config.json</code>; see the same README.</p>
+<a href="https://github.com/volcengine/OpenViking/blob/v0.5.5/docs/en/configuration/02-client.md#plugin-settings">OpenViking client configuration</a> lists the keys.</p>
+<p>A repository can carry its own settings in <code>.openviking/config.json</code>; see
+<a href="https://github.com/volcengine/OpenViking/blob/v0.5.5/docs/en/configuration/02-client.md#workspace-configuration">workspace configuration</a>.</p>
 <h2 id="check-it"><a class="header" href="#check-it">Check it</a></h2>
 <p>Ask the agent to run the <code>ov-memory-doctor</code> skill. Its Configuration section names the source of every
-value (<code>← ~/.openviking/ovcli.conf</code>, <code>← env</code>, <code>← Claude Code plugin option</code>) and its Connection section
-proves the key against the server: <code>/health</code> answers 200 even with a wrong key, so reachability alone
-proves nothing.</p>
+value (<code>← ~/.openviking/ovcli.conf</code>, <code>← env</code>) and its Connection section proves the key against the
+server: <code>/health</code> answers 200 even with a wrong key, so reachability alone proves nothing.</p>
 
                     </main>
 

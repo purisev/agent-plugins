@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-fa98f0ad.js";
+            window.path_to_searchindex_js = "searchindex-bd6411cf.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-eefae25e.js"></script>
@@ -182,23 +182,33 @@
                     <main>
                         <h1 id="plugins"><a class="header" href="#plugins">Plugins</a></h1>
 <h2 id="openviking-memory"><a class="header" href="#openviking-memory">openviking-memory</a></h2>
-<p>Repository: <a href="https://github.com/purisev/openviking-memory">purisev/openviking-memory</a></p>
+<p>Source: the official OpenViking plugins, pinned to release <strong>v0.5.5</strong> — Claude Code installs
+<a href="https://github.com/volcengine/OpenViking/tree/v0.5.5/examples/claude-code-memory-plugin"><code>examples/claude-code-memory-plugin</code></a>
+(plugin 0.7.22), Codex installs
+<a href="https://github.com/volcengine/OpenViking/tree/v0.5.5/examples/codex-memory-plugin"><code>examples/codex-memory-plugin</code></a>
+(plugin 0.11.21). Both are named <code>openviking-memory</code>, so <code>ov-wiki</code>’s dependency resolves on either host.</p>
 <p>Gives the agent a memory that outlives the session, kept on your OpenViking server.</p>
 <ul>
 <li><strong>Session start</strong> — injects your profile and an index of stored preferences and entities.</li>
 <li><strong>Every prompt</strong> — recalls memories relevant to it and adds them to the turn.</li>
-<li><strong>Every turn end</strong> — appends the new messages to a server-side session.</li>
+<li><strong>Every turn end</strong> — appends the new messages to a server-side session and commits it once the
+server reports more pending tokens than <code>commitTokenThreshold</code> (default 20000).</li>
 <li><strong>Session end and before compaction</strong> — commits the session, and the server extracts durable
-memories from it.</li>
-<li><strong>Tools</strong> — a local MCP proxy exposes the server’s tools to the agent: <code>search</code>, <code>find</code>, <code>read</code>,
-<code>list</code>, <code>tree</code>, <code>glob</code>, <code>grep</code>, <code>write</code>, <code>edit</code>, <code>remember</code>, <code>forget</code>, <code>add_resource</code>, <code>list_watches</code>,
-<code>cancel_watch</code>, <code>health</code>.</li>
+memories from it. Claude Code also captures subagents.</li>
+<li><strong>Tools</strong> — a local MCP proxy forwards the server’s own MCP tools (<code>search</code>, <code>find</code>, <code>read</code>, <code>list</code>,
+<code>glob</code>, <code>grep</code>, <code>write</code>, <code>edit</code>, <code>remember</code>, …); the exact set comes from your server version.</li>
 </ul>
 <p>Needs Node.js 18 or newer on the <code>PATH</code> of the environment that launches the host: the hooks and the
-proxy run the bare <code>node</code> command. At session start a small <code>sh</code> check tells the agent when <code>node</code> is
-missing or too old, so it can offer to install it.</p>
-<p>Skills: <code>openviking-memory</code> (how and when to use the tools), <code>ov-experience-memory</code>, and
-<code>ov-memory-doctor</code> (diagnostics).</p>
+proxy run the bare <code>node</code> command.</p>
+<p>Skills: <code>openviking-memory</code>, <code>ov-experience-memory</code>, <code>ov-memory-doctor</code>, <code>openviking-skills</code> and
+<code>openviking-rule-search</code>. Full reference:
+<a href="https://github.com/volcengine/OpenViking/blob/v0.5.5/docs/en/agent-integrations/02-claude-code.md">Claude Code</a>,
+<a href="https://github.com/volcengine/OpenViking/blob/v0.5.5/docs/en/agent-integrations/04-codex.md">Codex</a>.</p>
+<p>Memories are filed under a workspace peer derived from the repository’s git <code>origin</code> (falling back to
+the repository root). Outside a git repository memories go to your user-level space. Memories filed under
+a peer derived from the working directory are still recalled; to keep writing under such peers, set
+<code>"peerSource": "cwd"</code> under <code>plugin</code> in <code>~/.openviking/ovcli.conf</code>.</p>
+<p>To update to a newer OpenViking release, change <code>ref</code> in both marketplace files to the new tag.</p>
 <h2 id="ov-wiki"><a class="header" href="#ov-wiki">ov-wiki</a></h2>
 <p>Repository: <a href="https://github.com/purisev/openviking-wiki">purisev/openviking-wiki</a>. The plugin was called
 <code>openviking-wiki</code> until 0.3.0; the repository keeps that name.</p>
