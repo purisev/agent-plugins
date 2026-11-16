@@ -21,6 +21,8 @@ DRY_RUN=0
 WANT_HOSTS=""
 WANT_PLUGINS=""
 CONFIGURE=1
+REMOVE_DUPLICATES=0
+TAB=$(printf '\t')
 
 say() { printf '%s\n' "$*"; }
 step() { printf '\n==> %s\n' "$*"; }
@@ -39,6 +41,11 @@ Usage: install.sh [options]
   --plugin <name>         Install this plugin only. Repeatable.
                           Default: every plugin in the catalog.
   --no-config             Do not offer to create ~/.openviking/ovcli.conf.
+  --remove-duplicates     Remove what the purisev plugins make redundant: the
+                          same plugin installed from another marketplace, and
+                          loose skills a purisev plugin now ships, which move to
+                          <skills dir>.replaced/<time>/. Without it they are
+                          only listed.
   -y, --yes               Answer yes to every question. Nothing is asked, so
                           the connection file is not created either.
   --dry-run               Print what would be done and change nothing.
@@ -52,6 +59,7 @@ parse_args() {
       --host) [ $# -ge 2 ] || die "--host needs a value"; WANT_HOSTS="$WANT_HOSTS $2"; shift ;;
       --plugin) [ $# -ge 2 ] || die "--plugin needs a value"; WANT_PLUGINS="$WANT_PLUGINS $2"; shift ;;
       --no-config) CONFIGURE=0 ;;
+      --remove-duplicates) REMOVE_DUPLICATES=1 ;;
       -y|--yes) ASSUME_YES=1 ;;
       --dry-run) DRY_RUN=1 ;;
       -h|--help) usage; exit 0 ;;
@@ -244,6 +252,188 @@ install_into_codex() {
   CODEX_INSTALLED=1
 }
 
+# The same text is in install.ps1; install.test.mjs keeps the two equal.
+duplicates_js() {
+  cat <<'JS'
+// Finds what the purisev plugins make redundant on one host, given in PURISEV_HOST:
+// a plugin of the same name installed from another marketplace out of the same
+// repository, and a loose skill with the name of a skill a purisev plugin ships.
+// Prints one tab-separated line per finding and changes nothing:
+//   plugin       <id>    <purisev id>
+//   marketplace  <name>  <ids installed from it, comma-separated>
+//   skill        <dir>   <purisev id>
+const { execSync } = require("child_process");
+const fs = require("fs");
+const os = require("os");
+const path = require("path");
+
+const host = process.env.PURISEV_HOST;
+const MARKETPLACE = "purisev";
+
+const cli = (args) => {
+  try {
+    return JSON.parse(execSync(`${host} ${args}`, { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }));
+  } catch {
+    return null;
+  }
+};
+const readJson = (file) => {
+  try {
+    return JSON.parse(fs.readFileSync(file, "utf8"));
+  } catch {
+    return null;
+  }
+};
+const catalog = (root) => readJson(path.join(root || "", ".claude-plugin", "marketplace.json"))?.plugins ?? [];
+
+// host/owner/repo, whatever the spelling: owner/repo, https, ssh, with or without .git.
+const repoKey = (value) => {
+  if (!value) return null;
+  const key = String(value).trim().toLowerCase()
+    .replace(/^[a-z+]+:\/\//, "")
+    .replace(/^[^/@]+@/, "")
+    .replace(/^([^/:]+):(?!\d)/, "$1/")
+    .replace(/\.git$/, "")
+    .replace(/\/+$/, "");
+  return /^[^/]+\.[^/]+\//.test(key) ? key : `github.com/${key}`;
+};
+// A relative source is the marketplace's own repository.
+const entryRepo = (source, marketplaceRepo) => (typeof source === "string" ? marketplaceRepo : repoKey(source?.repo ?? source?.url));
+
+function emit(installed, duplicates, skillDirs) {
+  for (const plugin of duplicates) console.log(["plugin", plugin.id, `${plugin.name}@${MARKETPLACE}`].join("\t"));
+  for (const name of new Set(duplicates.map((plugin) => plugin.marketplace))) {
+    const ids = installed.filter((plugin) => plugin.marketplace === name).map((plugin) => plugin.id);
+    console.log(["marketplace", name, ids.join(",")].join("\t"));
+  }
+
+  for (const plugin of installed.filter((p) => p.marketplace === MARKETPLACE && p.root)) {
+    const names = [];
+    if (fs.existsSync(path.join(plugin.root, "SKILL.md"))) names.push(plugin.name);
+    const skills = path.join(plugin.root, "skills");
+    if (fs.existsSync(skills)) {
+      for (const dir of fs.readdirSync(skills)) if (fs.existsSync(path.join(skills, dir, "SKILL.md"))) names.push(dir);
+    }
+    for (const parent of skillDirs) {
+      for (const name of names) {
+        const dir = path.join(parent, name);
+        if (fs.existsSync(path.join(dir, "SKILL.md"))) console.log(["skill", dir, plugin.id].join("\t"));
+      }
+    }
+  }
+}
+
+function claude() {
+  const marketplaces = cli("plugin marketplace list --json") ?? [];
+  const ours = marketplaces.find((m) => m.name === MARKETPLACE);
+  if (!ours) return;
+  const reference = new Map(catalog(ours.installLocation).map((p) => [p.name, entryRepo(p.source, null)]));
+  const installed = (cli("plugin list --json") ?? []).map((p) => {
+    const at = p.id.indexOf("@");
+    return { id: p.id, name: p.id.slice(0, at), marketplace: p.id.slice(at + 1), root: p.installPath };
+  });
+  const duplicates = installed.filter((plugin) => {
+    if (plugin.marketplace === MARKETPLACE || !reference.get(plugin.name)) return false;
+    const marketplace = marketplaces.find((m) => m.name === plugin.marketplace);
+    const entry = marketplace && catalog(marketplace.installLocation).find((e) => e.name === plugin.name);
+    return Boolean(entry) && entryRepo(entry.source, repoKey(marketplace.repo ?? marketplace.url)) === reference.get(plugin.name);
+  });
+  const config = process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), ".claude");
+  emit(installed, duplicates, [path.join(config, "skills")]);
+}
+
+function codex() {
+  const marketplaces = cli("plugin marketplace list --json")?.marketplaces ?? [];
+  const ours = marketplaces.find((m) => m.name === MARKETPLACE);
+  if (!ours) return;
+  const reference = new Map(catalog(ours.root).map((p) => [p.name, entryRepo(p.source, null)]));
+  const home = process.env.CODEX_HOME || path.join(os.homedir(), ".codex");
+  const installed = (cli("plugin list --json")?.installed ?? []).filter((p) => p.installed).map((p) => ({
+    id: p.pluginId,
+    name: p.name,
+    marketplace: p.marketplaceName,
+    root: path.join(home, "plugins", "cache", p.marketplaceName, p.name, String(p.version)),
+    repo: p.source?.source === "local"
+      ? (p.marketplaceSource?.sourceType === "git" ? repoKey(p.marketplaceSource.source) : null)
+      : repoKey(p.source?.url),
+  }));
+  const duplicates = installed.filter((plugin) =>
+    plugin.marketplace !== MARKETPLACE && Boolean(plugin.repo) && plugin.repo === reference.get(plugin.name));
+  emit(installed, duplicates, [path.join(home, "skills"), path.join(os.homedir(), ".agents", "skills")]);
+}
+
+if (host === "claude") claude();
+else if (host === "codex") codex();
+JS
+}
+
+describe_duplicate() {
+  case "$1" in
+    plugin) say "  $2: another copy of $3" ;;
+    skill) say "  $2: a loose copy of a skill $3 ships" ;;
+  esac
+}
+
+move_skill() {
+  dest="$(dirname "$1").replaced/$STAMP"
+  if [ "$DRY_RUN" -eq 1 ]; then
+    say "  would move $1 to $dest/"
+    return 0
+  fi
+  mkdir -p "$dest" && mv "$1" "$dest/" && say "  moved $1 to $dest/"
+}
+
+# Runs after the host's install, so the purisev copy is in place before another goes.
+# A removal that fails is reported and the installer carries on.
+handle_duplicates() {
+  host=$1
+  if ! node_is_usable; then
+    warn "not looking for duplicates in $host: that needs node"
+    return 0
+  fi
+  findings=$(PURISEV_HOST="$host" node -e "$(duplicates_js)" 2>/dev/null) || findings=""
+  [ -n "$findings" ] || return 0
+
+  step "Duplicates in $host"
+  if [ "$REMOVE_DUPLICATES" -eq 0 ]; then
+    printf '%s\n' "$findings" | while IFS="$TAB" read -r kind what owner; do describe_duplicate "$kind" "$what" "$owner"; done
+    say "  Run the installer again with --remove-duplicates to remove them."
+    return 0
+  fi
+
+  removed=""
+  while IFS="$TAB" read -r kind what owner; do
+    case "$kind" in
+      plugin)
+        if confirm "Remove $what, another copy of $owner?"; then
+          case "$host" in claude) verb=uninstall ;; *) verb=remove ;; esac
+          if run "$host" plugin "$verb" "$what" </dev/null; then removed="$removed $what"
+          else warn "could not remove $what; continuing"
+          fi
+        else
+          say "  keeping $what"
+        fi ;;
+      marketplace)
+        # Removing a marketplace uninstalls everything from it, so only an emptied one goes.
+        emptied=1
+        for id in $(printf '%s' "$owner" | tr ',' ' '); do
+          case " $removed " in *" $id "*) ;; *) emptied=0 ;; esac
+        done
+        if [ "$emptied" -eq 1 ]; then
+          run "$host" plugin marketplace remove "$what" </dev/null || warn "could not remove the marketplace $what; continuing"
+        fi ;;
+      skill)
+        if confirm "Move $what, a loose copy of a skill $owner ships, out of the way?"; then
+          move_skill "$what" || warn "could not move $what; continuing"
+        else
+          say "  keeping $what"
+        fi ;;
+    esac
+  done <<FINDINGS
+$findings
+FINDINGS
+}
+
 json_string() { printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g'; }
 
 configure_connection() {
@@ -292,6 +482,7 @@ finish() {
 main() {
   parse_args "$@"
   PLUGINS="${WANT_PLUGINS:-$ALL_PLUGINS}"
+  STAMP=$(date +%Y%m%d-%H%M%S)
   if [ "$DRY_RUN" -eq 1 ]; then say "Dry run: nothing will be changed."; fi
 
   check_tools
@@ -301,6 +492,7 @@ main() {
       claude) install_into_claude ;;
       codex) install_into_codex ;;
     esac
+    handle_duplicates "$host"
   done
   configure_connection
   finish

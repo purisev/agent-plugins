@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { delimiter, join } from "node:path";
+import { delimiter, dirname, join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
@@ -41,7 +41,7 @@ function writeTool(binDir, name, body) {
   }
 }
 
-function sandbox({ claudeMarketplaces = "", claudePlugins = "[]", codexMarketplaces = "", nodeVersion = "22.1.0", hosts = ["claude", "codex"] } = {}) {
+function sandbox({ claudeMarketplaces = "", claudePlugins = "[]", codexMarketplaces = "", nodeVersion = "22.1.0", hosts = ["claude", "codex"], replies = {}, failing = [] } = {}) {
   const root = mkdtempSync(join(tmpdir(), "agent-plugins-install-"));
   const bin = join(root, "bin");
   const home = join(root, "home");
@@ -49,13 +49,18 @@ function sandbox({ claudeMarketplaces = "", claudePlugins = "[]", codexMarketpla
   mkdirSync(bin);
   mkdirSync(home);
   writeFileSync(log, "");
+  // A function builds the replies once the home directory exists, for replies that name files in it.
+  if (typeof replies === "function") replies = replies(home);
 
   const record = `require("fs").appendFileSync(${JSON.stringify(log)}, [${"NAME"}, ...process.argv.slice(2)].join(" ") + "\\n");`;
-  const tool = (name, replies) => writeTool(bin, name, `
+  // A stand-in answers with the reply of the longest prefix that matches its arguments.
+  const tool = (name, toolReplies) => writeTool(bin, name, `
 const args = process.argv.slice(2).join(" ");
 ${record.replace("NAME", JSON.stringify(name))}
-const replies = ${JSON.stringify(replies)};
-for (const [prefix, text] of Object.entries(replies)) if (args.startsWith(prefix)) process.stdout.write(text);
+const replies = ${JSON.stringify(toolReplies)};
+const prefix = Object.keys(replies).filter((p) => args.startsWith(p)).sort((a, b) => b.length - a.length)[0];
+if (prefix !== undefined) process.stdout.write(replies[prefix]);
+if (${JSON.stringify(failing)}.some((f) => \`${name} \${args}\`.startsWith(f))) process.exitCode = 1;
 `);
 
   tool("git", { "--version": "git version 2.0.0\n" });
@@ -64,10 +69,11 @@ for (const [prefix, text] of Object.entries(replies)) if (args.startsWith(prefix
 const args = process.argv.slice(2);
 if (args[0] === "--version") console.log("v${nodeVersion}");
 else if (args[0] === "-p") console.log("${nodeVersion.split(".")[0]}");
+else process.exitCode = require("child_process").spawnSync(process.execPath, args, { stdio: "inherit" }).status;
 `);
   }
-  if (hosts.includes("claude")) tool("claude", { "plugin marketplace list": claudeMarketplaces, "plugin list --json": claudePlugins });
-  if (hosts.includes("codex")) tool("codex", { "plugin marketplace list": codexMarketplaces });
+  if (hosts.includes("claude")) tool("claude", { "plugin marketplace list": claudeMarketplaces, "plugin list --json": claudePlugins, ...replies.claude });
+  if (hosts.includes("codex")) tool("codex", { "plugin marketplace list": codexMarketplaces, ...replies.codex });
 
   return { root, bin, home, log, calls: () => readFileSync(log, "utf-8").split("\n").filter(Boolean) };
 }
@@ -84,22 +90,90 @@ function systemPath() {
 
 function environment(box, extra = {}) {
   const env = { ...process.env, PATH: [box.bin, ...systemPath()].join(delimiter), HOME: box.home, USERPROFILE: box.home, ...extra };
-  for (const name of ["OPENVIKING_URL", "OPENVIKING_BASE_URL", "OPENVIKING_CLI_CONFIG_FILE"]) if (!(name in extra)) delete env[name];
+  for (const name of ["OPENVIKING_URL", "OPENVIKING_BASE_URL", "OPENVIKING_CLI_CONFIG_FILE", "CLAUDE_CONFIG_DIR", "CODEX_HOME"]) if (!(name in extra)) delete env[name];
   return env;
 }
+
+
+const CATALOG = readFileSync(new URL("./.claude-plugin/marketplace.json", import.meta.url), "utf-8");
+
+function writeFile(file, text) {
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(file, text);
+}
+
+// A machine where humanizer is also installed from its author's marketplace, where loose copies of
+// helm and terraform sit next to a skill of the user's own, and where another marketplace offers an
+// unrelated plugin that happens to be called playwright.
+function duplicatesSandbox(options = {}) {
+  let home;
+  const box = sandbox({ ...options, replies: (h) => duplicateReplies((home = h)) });
+  return { ...box, claudeDir: join(home, ".claude"), agentsSkills: join(home, ".agents", "skills") };
+}
+
+function duplicateReplies(home) {
+  const claudeDir = join(home, ".claude");
+  const codexDir = join(home, ".codex");
+  const marketplace = (name) => join(claudeDir, "plugins", "marketplaces", name);
+  writeFile(join(marketplace("purisev"), ".claude-plugin", "marketplace.json"), CATALOG);
+  writeFile(join(marketplace("humanizer"), ".claude-plugin", "marketplace.json"), JSON.stringify({ plugins: [{ name: "humanizer", source: "./" }, { name: "extra", source: "./extra" }] }));
+  writeFile(join(marketplace("official"), ".claude-plugin", "marketplace.json"), JSON.stringify({ plugins: [{ name: "playwright", source: { source: "url", url: "https://github.com/microsoft/playwright-mcp.git" } }] }));
+  const cache = (name) => join(claudeDir, "plugins", "cache", "purisev", name, "1.0.0");
+  writeFile(join(cache("humanizer"), "SKILL.md"), "---\n");
+  writeFile(join(cache("infra"), "skills", "helm", "SKILL.md"), "---\n");
+  writeFile(join(claudeDir, "skills", "helm", "SKILL.md"), "---\n");
+  writeFile(join(claudeDir, "skills", "mine", "SKILL.md"), "---\n");
+
+  const codexRoot = join(home, "codex-marketplaces", "purisev");
+  writeFile(join(codexRoot, ".claude-plugin", "marketplace.json"), CATALOG);
+  writeFile(join(codexDir, "plugins", "cache", "purisev", "infra", "1.0.0", "skills", "terraform", "SKILL.md"), "---\n");
+  writeFile(join(home, ".agents", "skills", "terraform", "SKILL.md"), "---\n");
+
+  const claude = {
+    "plugin marketplace list --json": JSON.stringify([
+      { name: "purisev", source: "github", repo: "purisev/agent-plugins", installLocation: marketplace("purisev") },
+      { name: "humanizer", source: "github", repo: "blader/humanizer", installLocation: marketplace("humanizer") },
+      { name: "official", source: "github", repo: "example/official", installLocation: marketplace("official") },
+    ]),
+    "plugin list --json": JSON.stringify([
+      { id: "humanizer@purisev", installPath: cache("humanizer") },
+      { id: "infra@purisev", installPath: cache("infra") },
+      { id: "humanizer@humanizer", installPath: join(claudeDir, "plugins", "cache", "humanizer", "humanizer", "2.9.1") },
+      { id: "extra@humanizer", installPath: join(claudeDir, "plugins", "cache", "humanizer", "extra", "1.0.0") },
+      { id: "playwright@official", installPath: join(claudeDir, "plugins", "cache", "official", "playwright", "1.0.0") },
+    ]),
+  };
+  const codex = {
+    "plugin marketplace list --json": JSON.stringify({ marketplaces: [
+      { name: "purisev", root: codexRoot },
+      { name: "humanizer", root: join(home, "codex-marketplaces", "humanizer"), marketplaceSource: { sourceType: "git", source: "https://github.com/blader/humanizer.git" } },
+    ] }),
+    "plugin list --json": JSON.stringify({ installed: [
+      { pluginId: "infra@purisev", name: "infra", marketplaceName: "purisev", version: "1.0.0", installed: true, source: { source: "git-subdir", url: "https://github.com/purisev/agent-skills.git", path: "infra" } },
+      { pluginId: "humanizer@humanizer", name: "humanizer", marketplaceName: "humanizer", version: "4.0.0", installed: true, source: { source: "local", path: "/elsewhere" }, marketplaceSource: { sourceType: "git", source: "https://github.com/blader/humanizer.git" } },
+    ] }),
+  };
+  return { claude, codex };
+}
+
+const replaced = (skillsDir, name) => {
+  const parent = `${skillsDir}.replaced`;
+  return existsSync(parent) && readdirSync(parent).some((stamp) => existsSync(join(parent, stamp, name, "SKILL.md")));
+};
+const removals = (calls) => changes(calls).filter((call) => / (uninstall|remove) /.test(call));
 
 const installers = [
   {
     name: "install.sh",
     skip: WINDOWS || !SH ? "needs a POSIX sh" : false,
-    run: (box, flags, env) => spawnSync(SH, [SH_SCRIPT, ...flags.map((f) => ({ yes: "--yes", dryRun: "--dry-run" }[f] || f))], { env: environment(box, env), encoding: "utf-8", stdio: ["ignore", "pipe", "pipe"] }),
+    run: (box, flags, env) => spawnSync(SH, [SH_SCRIPT, ...flags.map((f) => ({ yes: "--yes", dryRun: "--dry-run", removeDuplicates: "--remove-duplicates" }[f] || f))], { env: environment(box, env), encoding: "utf-8", stdio: ["ignore", "pipe", "pipe"] }),
     hostFlag: (host) => ["--host", host],
     pluginFlag: (plugin) => ["--plugin", plugin],
   },
   {
     name: "install.ps1",
     skip: PWSH ? false : "needs pwsh",
-    run: (box, flags, env) => spawnSync(PWSH, ["-NoLogo", "-NoProfile", "-NonInteractive", "-File", PS_SCRIPT, ...flags.map((f) => ({ yes: "-Yes", dryRun: "-DryRun" }[f] || f))], { env: environment(box, env), encoding: "utf-8", stdio: ["ignore", "pipe", "pipe"] }),
+    run: (box, flags, env) => spawnSync(PWSH, ["-NoLogo", "-NoProfile", "-NonInteractive", "-File", PS_SCRIPT, ...flags.map((f) => ({ yes: "-Yes", dryRun: "-DryRun", removeDuplicates: "-RemoveDuplicates" }[f] || f))], { env: environment(box, env), encoding: "utf-8", stdio: ["ignore", "pipe", "pipe"] }),
     hostFlag: (host) => ["-AgentHost", host],
     pluginFlag: (plugin) => ["-Plugin", plugin],
   },
@@ -155,6 +229,55 @@ for (const installer of installers) {
       "codex plugin marketplace add purisev/agent-plugins",
       "codex plugin add openviking-memory@purisev",
     ]);
+  });
+
+  it("duplicates are listed, and nothing is removed, without the flag", () => {
+    const box = duplicatesSandbox();
+    const result = installer.run(box, ["yes"]);
+    assert.equal(result.status, 0, result.stderr + result.stdout);
+    assert.deepEqual(removals(box.calls()), []);
+    assert.match(result.stdout, /humanizer@humanizer: another copy of humanizer@purisev/);
+    assert.match(result.stdout, /helm: a loose copy of a skill infra@purisev ships/);
+    assert.match(result.stdout, /terraform: a loose copy of a skill infra@purisev ships/);
+    assert.match(result.stdout, /again with -?-remove-?duplicates/i);
+    assert.doesNotMatch(result.stdout, /playwright@official|mine/);
+    assert.ok(existsSync(join(box.claudeDir, "skills", "helm", "SKILL.md")));
+  });
+
+  it("with the flag, duplicates go and everything else stays", () => {
+    const box = duplicatesSandbox();
+    const result = installer.run(box, ["yes", "removeDuplicates"]);
+    assert.equal(result.status, 0, result.stderr + result.stdout);
+    // The humanizer marketplace stays under Claude Code, where extra@humanizer is still installed from it.
+    assert.deepEqual(removals(box.calls()), [
+      "claude plugin uninstall humanizer@humanizer",
+      "codex plugin remove humanizer@humanizer",
+      "codex plugin marketplace remove humanizer",
+    ]);
+    assert.ok(!existsSync(join(box.claudeDir, "skills", "helm")));
+    assert.ok(replaced(join(box.claudeDir, "skills"), "helm"));
+    assert.ok(!existsSync(join(box.agentsSkills, "terraform")));
+    assert.ok(replaced(box.agentsSkills, "terraform"));
+    assert.ok(existsSync(join(box.claudeDir, "skills", "mine", "SKILL.md")));
+  });
+
+  it("a dry run with the flag removes and moves nothing", () => {
+    const box = duplicatesSandbox();
+    const result = installer.run(box, ["yes", "dryRun", "removeDuplicates"]);
+    assert.equal(result.status, 0, result.stderr + result.stdout);
+    assert.deepEqual(changes(box.calls()), []);
+    assert.match(result.stdout, /would run: claude plugin uninstall humanizer@humanizer/);
+    assert.match(result.stdout, /would move .*helm/);
+    assert.ok(existsSync(join(box.claudeDir, "skills", "helm", "SKILL.md")));
+  });
+
+  it("a removal that fails is reported and the installer carries on", () => {
+    const box = duplicatesSandbox({ failing: ["claude plugin uninstall"] });
+    const result = installer.run(box, ["yes", "removeDuplicates"]);
+    assert.equal(result.status, 0, result.stderr + result.stdout);
+    assert.match(result.stdout + result.stderr, /could not remove humanizer@humanizer; continuing/);
+    assert.ok(removals(box.calls()).includes("codex plugin remove humanizer@humanizer"));
+    assert.ok(replaced(join(box.claudeDir, "skills"), "helm"));
   });
 
   it("a missing node is reported and, without consent, not installed", () => {
@@ -218,6 +341,12 @@ test("install.sh: a download cut short runs nothing", { skip: WINDOWS || !SH ? "
     spawnSync(SH, [truncated, "--yes"], { env: environment(box), encoding: "utf-8" });
     assert.deepEqual(box.calls(), [], `the first ${keep} lines ran a command`);
   }
+});
+
+test("install.sh and install.ps1 look for duplicates with the same program", () => {
+  const sh = readFileSync(SH_SCRIPT, "utf-8").match(/^duplicates_js\(\) \{\n  cat <<'JS'\n([\s\S]*?)\nJS\n\}/m)[1];
+  const ps = readFileSync(PS_SCRIPT, "utf-8").match(/^function Get-DuplicatesJs \{\n  return @'\n([\s\S]*?)\n'@\n\}/m)[1];
+  assert.equal(ps, sh);
 });
 
 test("install.sh and install.ps1 install the same plugins from the same marketplace", () => {

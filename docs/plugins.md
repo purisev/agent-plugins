@@ -69,8 +69,8 @@ does not find a skill kept at the root of a repository.
 One skill, `humanizer`: rewrites text so it reads like its writer, removing AI writing patterns such
 as forced triads, staged openers, inflated claims and stock AI words, without changing what it says.
 
-If you installed it earlier from its author's marketplace, remove that copy, or the skill appears
-twice: `claude plugin uninstall humanizer@humanizer` and `claude plugin marketplace remove humanizer`.
+If you installed it earlier from its author's marketplace, the skill appears twice until that copy
+goes; the installer's `--remove-duplicates` removes it.
 
 ## ponytail
 

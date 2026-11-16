@@ -13,6 +13,7 @@ param(
   [ValidateSet('openviking-memory', 'ov-wiki', 'humanizer', 'ponytail', 'infra', 'playwright')]
   [string[]]$Plugin = @(),
   [switch]$NoConfig,
+  [switch]$RemoveDuplicates,
   [switch]$Yes,
   [switch]$DryRun
 )
@@ -163,6 +164,183 @@ function Install-IntoCodex([string[]]$Plugins) {
   $script:CodexInstalled = $true
 }
 
+# The same text is in install.sh; install.test.mjs keeps the two equal.
+function Get-DuplicatesJs {
+  return @'
+// Finds what the purisev plugins make redundant on one host, given in PURISEV_HOST:
+// a plugin of the same name installed from another marketplace out of the same
+// repository, and a loose skill with the name of a skill a purisev plugin ships.
+// Prints one tab-separated line per finding and changes nothing:
+//   plugin       <id>    <purisev id>
+//   marketplace  <name>  <ids installed from it, comma-separated>
+//   skill        <dir>   <purisev id>
+const { execSync } = require("child_process");
+const fs = require("fs");
+const os = require("os");
+const path = require("path");
+
+const host = process.env.PURISEV_HOST;
+const MARKETPLACE = "purisev";
+
+const cli = (args) => {
+  try {
+    return JSON.parse(execSync(`${host} ${args}`, { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }));
+  } catch {
+    return null;
+  }
+};
+const readJson = (file) => {
+  try {
+    return JSON.parse(fs.readFileSync(file, "utf8"));
+  } catch {
+    return null;
+  }
+};
+const catalog = (root) => readJson(path.join(root || "", ".claude-plugin", "marketplace.json"))?.plugins ?? [];
+
+// host/owner/repo, whatever the spelling: owner/repo, https, ssh, with or without .git.
+const repoKey = (value) => {
+  if (!value) return null;
+  const key = String(value).trim().toLowerCase()
+    .replace(/^[a-z+]+:\/\//, "")
+    .replace(/^[^/@]+@/, "")
+    .replace(/^([^/:]+):(?!\d)/, "$1/")
+    .replace(/\.git$/, "")
+    .replace(/\/+$/, "");
+  return /^[^/]+\.[^/]+\//.test(key) ? key : `github.com/${key}`;
+};
+// A relative source is the marketplace's own repository.
+const entryRepo = (source, marketplaceRepo) => (typeof source === "string" ? marketplaceRepo : repoKey(source?.repo ?? source?.url));
+
+function emit(installed, duplicates, skillDirs) {
+  for (const plugin of duplicates) console.log(["plugin", plugin.id, `${plugin.name}@${MARKETPLACE}`].join("\t"));
+  for (const name of new Set(duplicates.map((plugin) => plugin.marketplace))) {
+    const ids = installed.filter((plugin) => plugin.marketplace === name).map((plugin) => plugin.id);
+    console.log(["marketplace", name, ids.join(",")].join("\t"));
+  }
+
+  for (const plugin of installed.filter((p) => p.marketplace === MARKETPLACE && p.root)) {
+    const names = [];
+    if (fs.existsSync(path.join(plugin.root, "SKILL.md"))) names.push(plugin.name);
+    const skills = path.join(plugin.root, "skills");
+    if (fs.existsSync(skills)) {
+      for (const dir of fs.readdirSync(skills)) if (fs.existsSync(path.join(skills, dir, "SKILL.md"))) names.push(dir);
+    }
+    for (const parent of skillDirs) {
+      for (const name of names) {
+        const dir = path.join(parent, name);
+        if (fs.existsSync(path.join(dir, "SKILL.md"))) console.log(["skill", dir, plugin.id].join("\t"));
+      }
+    }
+  }
+}
+
+function claude() {
+  const marketplaces = cli("plugin marketplace list --json") ?? [];
+  const ours = marketplaces.find((m) => m.name === MARKETPLACE);
+  if (!ours) return;
+  const reference = new Map(catalog(ours.installLocation).map((p) => [p.name, entryRepo(p.source, null)]));
+  const installed = (cli("plugin list --json") ?? []).map((p) => {
+    const at = p.id.indexOf("@");
+    return { id: p.id, name: p.id.slice(0, at), marketplace: p.id.slice(at + 1), root: p.installPath };
+  });
+  const duplicates = installed.filter((plugin) => {
+    if (plugin.marketplace === MARKETPLACE || !reference.get(plugin.name)) return false;
+    const marketplace = marketplaces.find((m) => m.name === plugin.marketplace);
+    const entry = marketplace && catalog(marketplace.installLocation).find((e) => e.name === plugin.name);
+    return Boolean(entry) && entryRepo(entry.source, repoKey(marketplace.repo ?? marketplace.url)) === reference.get(plugin.name);
+  });
+  const config = process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), ".claude");
+  emit(installed, duplicates, [path.join(config, "skills")]);
+}
+
+function codex() {
+  const marketplaces = cli("plugin marketplace list --json")?.marketplaces ?? [];
+  const ours = marketplaces.find((m) => m.name === MARKETPLACE);
+  if (!ours) return;
+  const reference = new Map(catalog(ours.root).map((p) => [p.name, entryRepo(p.source, null)]));
+  const home = process.env.CODEX_HOME || path.join(os.homedir(), ".codex");
+  const installed = (cli("plugin list --json")?.installed ?? []).filter((p) => p.installed).map((p) => ({
+    id: p.pluginId,
+    name: p.name,
+    marketplace: p.marketplaceName,
+    root: path.join(home, "plugins", "cache", p.marketplaceName, p.name, String(p.version)),
+    repo: p.source?.source === "local"
+      ? (p.marketplaceSource?.sourceType === "git" ? repoKey(p.marketplaceSource.source) : null)
+      : repoKey(p.source?.url),
+  }));
+  const duplicates = installed.filter((plugin) =>
+    plugin.marketplace !== MARKETPLACE && Boolean(plugin.repo) && plugin.repo === reference.get(plugin.name));
+  emit(installed, duplicates, [path.join(home, "skills"), path.join(os.homedir(), ".agents", "skills")]);
+}
+
+if (host === "claude") claude();
+else if (host === "codex") codex();
+'@
+}
+
+function Move-Skill([string]$Dir) {
+  $dest = Join-Path ((Split-Path $Dir) + '.replaced') $script:Stamp
+  if ($DryRun) { Say "  would move $Dir to $dest"; return }
+  New-Item -ItemType Directory -Path $dest -Force | Out-Null
+  Move-Item -LiteralPath $Dir -Destination $dest
+  Say "  moved $Dir to $dest"
+}
+
+# Runs after the host's install, so the purisev copy is in place before another goes.
+# A removal that fails is reported and the installer carries on.
+function Resolve-Duplicates([string]$Name) {
+  if ((Get-NodeMajor) -lt $MinNodeMajor) { Warn "not looking for duplicates in ${Name}: that needs node"; return }
+  $js = Join-Path ([IO.Path]::GetTempPath()) "purisev-duplicates-$PID.js"
+  [IO.File]::WriteAllText($js, (Get-DuplicatesJs), (New-Object Text.UTF8Encoding $false))
+  $env:PURISEV_HOST = $Name
+  try { $findings = @(& node $js 2>$null | Where-Object { $_ }) }
+  catch { $findings = @() }
+  finally {
+    Remove-Item -LiteralPath $js -ErrorAction SilentlyContinue
+    Remove-Item env:PURISEV_HOST -ErrorAction SilentlyContinue
+  }
+  if ($findings.Count -eq 0) { return }
+
+  Step "Duplicates in $Name"
+  if (-not $RemoveDuplicates) {
+    foreach ($line in $findings) {
+      $kind, $what, $owner = $line -split "`t"
+      if ($kind -eq 'plugin') { Say "  ${what}: another copy of $owner" }
+      elseif ($kind -eq 'skill') { Say "  ${what}: a loose copy of a skill $owner ships" }
+    }
+    Say '  Run the installer again with -RemoveDuplicates to remove them.'
+    return
+  }
+
+  $removed = @()
+  foreach ($line in $findings) {
+    $kind, $what, $owner = $line -split "`t"
+    switch ($kind) {
+      'plugin' {
+        if (Confirm-Step "Remove $what, another copy of ${owner}?") {
+          $verb = if ($Name -eq 'claude') { 'uninstall' } else { 'remove' }
+          try { Invoke-Tool $Name plugin $verb $what; $removed += $what }
+          catch { Warn "could not remove ${what}; continuing" }
+        } else { Say "  keeping $what" }
+      }
+      'marketplace' {
+        # Removing a marketplace uninstalls everything from it, so only an emptied one goes.
+        if (@($owner -split ',' | Where-Object { $removed -notcontains $_ }).Count -eq 0) {
+          try { Invoke-Tool $Name plugin marketplace remove $what }
+          catch { Warn "could not remove the marketplace ${what}; continuing" }
+        }
+      }
+      'skill' {
+        if (Confirm-Step "Move $what, a loose copy of a skill $owner ships, out of the way?") {
+          try { Move-Skill $what }
+          catch { Warn "could not move ${what}; continuing" }
+        } else { Say "  keeping $what" }
+      }
+    }
+  }
+}
+
 function Initialize-Connection([string[]]$Plugins) {
   if ($NoConfig -or ($Plugins -notcontains 'openviking-memory')) { return }
   $conf = if ($env:OPENVIKING_CLI_CONFIG_FILE) { $env:OPENVIKING_CLI_CONFIG_FILE } else { Join-Path $HOME '.openviking/ovcli.conf' }
@@ -194,10 +372,12 @@ function Initialize-Connection([string[]]$Plugins) {
 function Main {
   $plugins = if ($Plugin.Count -gt 0) { $Plugin } else { $AllPlugins }
   if ($DryRun) { Say 'Dry run: nothing will be changed.' }
+  $script:Stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
 
   Test-Toolchain
   foreach ($name in (Get-AgentHost)) {
     if ($name -eq 'claude') { Install-IntoClaude $plugins } else { Install-IntoCodex $plugins }
+    Resolve-Duplicates $name
   }
   Initialize-Connection $plugins
 
