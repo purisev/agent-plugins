@@ -165,7 +165,7 @@ function Install-IntoCodex([string[]]$Plugins) {
 }
 
 # The same text is in install.sh; install.test.mjs keeps the two equal.
-function Get-DuplicatesJs {
+function Get-DuplicateFinder {
   return @'
 // Finds what the purisev plugins make redundant on one host, given in PURISEV_HOST:
 // a plugin of the same name installed from another marketplace out of the same
@@ -289,10 +289,10 @@ function Move-Skill([string]$Dir) {
 
 # Runs after the host's install, so the purisev copy is in place before another goes.
 # A removal that fails is reported and the installer carries on.
-function Resolve-Duplicates([string]$Name) {
+function Resolve-Duplicate([string]$Name) {
   if ((Get-NodeMajor) -lt $MinNodeMajor) { Warn "not looking for duplicates in ${Name}: that needs node"; return }
   $js = Join-Path ([IO.Path]::GetTempPath()) "purisev-duplicates-$PID.js"
-  [IO.File]::WriteAllText($js, (Get-DuplicatesJs), (New-Object Text.UTF8Encoding $false))
+  [IO.File]::WriteAllText($js, (Get-DuplicateFinder), (New-Object Text.UTF8Encoding $false))
   $env:PURISEV_HOST = $Name
   try { $findings = @(& node $js 2>$null | Where-Object { $_ }) }
   catch { $findings = @() }
@@ -377,7 +377,7 @@ function Main {
   Test-Toolchain
   foreach ($name in (Get-AgentHost)) {
     if ($name -eq 'claude') { Install-IntoClaude $plugins } else { Install-IntoCodex $plugins }
-    Resolve-Duplicates $name
+    Resolve-Duplicate $name
   }
   Initialize-Connection $plugins
 

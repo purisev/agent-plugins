@@ -344,8 +344,10 @@ test("install.sh: a download cut short runs nothing", { skip: WINDOWS || !SH ? "
 });
 
 test("install.sh and install.ps1 look for duplicates with the same program", () => {
-  const sh = readFileSync(SH_SCRIPT, "utf-8").match(/^duplicates_js\(\) \{\n  cat <<'JS'\n([\s\S]*?)\nJS\n\}/m)[1];
-  const ps = readFileSync(PS_SCRIPT, "utf-8").match(/^function Get-DuplicatesJs \{\n  return @'\n([\s\S]*?)\n'@\n\}/m)[1];
+  // A Windows checkout may carry CRLF line ends.
+  const read = (file) => readFileSync(file, "utf-8").replace(/\r\n/g, "\n");
+  const sh = read(SH_SCRIPT).match(/^duplicates_js\(\) \{\n  cat <<'JS'\n([\s\S]*?)\nJS\n\}/m)[1];
+  const ps = read(PS_SCRIPT).match(/^function Get-DuplicateFinder \{\n  return @'\n([\s\S]*?)\n'@\n\}/m)[1];
   assert.equal(ps, sh);
 });
 
