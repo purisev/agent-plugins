@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-db10e07c.js";
+            window.path_to_searchindex_js = "searchindex-f2607569.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-eefae25e.js"></script>
@@ -205,6 +205,17 @@ hooks needs approval again; the doctor lists the hooks that have no trust record
 <li><strong>The plugin is disabled</strong>, or Claude Code disabled it over a missing dependency. <code>claude plugin list</code>
 shows the state and the reason.</li>
 </ul>
+<h2 id="host-key-verification-failed-when-a-plugin-installs-or-updates"><a class="header" href="#host-key-verification-failed-when-a-plugin-installs-or-updates"><code>Host key verification failed</code> when a plugin installs or updates</a></h2>
+<p>Claude Code clones a plugin whose catalog entry has a <code>github</code> source over SSH, and fails on a machine
+without an SSH key for GitHub. This catalog names every plugin by its https URL, so the error means
+Claude Code still holds an older copy of the catalog. Run the installer again: it refreshes the
+marketplace before it updates the plugins. By hand:</p>
+<pre><code class="language-sh">claude plugin marketplace update purisev &amp;&amp; claude plugin update &lt;plugin&gt;@purisev
+</code></pre>
+<p>The same error from a plugin of another marketplace goes away when git takes GitHub’s SSH addresses
+over https:</p>
+<pre><code class="language-sh">git config --global url."https://github.com/".insteadOf "git@github.com:"
+</code></pre>
 <h2 id="moving-from-the-fork-to-the-upstream-plugin"><a class="header" href="#moving-from-the-fork-to-the-upstream-plugin">Moving from the fork to the upstream plugin</a></h2>
 <p><code>openviking-memory@purisev</code> used to come from the fork <code>purisev/openviking-memory</code>. It now comes from
 the official OpenViking repository. Refresh the marketplace and update the plugin:</p>

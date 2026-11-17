@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-db10e07c.js";
+            window.path_to_searchindex_js = "searchindex-f2607569.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-eefae25e.js"></script>
@@ -192,11 +192,11 @@ with <code>claude plugin validate &lt;checkout&gt;/.claude-plugin/plugin.json</c
 <code>.codex-plugin/plugin.json</code>.</li>
 <li>Add an entry with the same <code>name</code> to both catalogs:
 <ul>
-<li><code>.claude-plugin/marketplace.json</code> — a <code>github</code> source, or a <code>git-subdir</code> source for a directory of
-purisev/agent-skills, with no <code>ref</code>, so it follows the default branch;</li>
-<li><code>.agents/plugins/marketplace.json</code> — a <code>url</code> or <code>git-subdir</code> source for the same place with
-<code>"ref": "main"</code>, and a <code>policy</code>. Codex has no <code>github</code> source type and lists nothing from the
-first file.</li>
+<li><code>.claude-plugin/marketplace.json</code> — a <code>url</code> source with the https clone URL, or a <code>git-subdir</code>
+source for a directory of purisev/agent-skills, with no <code>ref</code>, so it follows the default branch.
+Not a <code>github</code> source: Claude Code clones that over SSH and fails without an SSH key for GitHub;</li>
+<li><code>.agents/plugins/marketplace.json</code> — the same source with <code>"ref": "main"</code>, and a <code>policy</code>. Codex
+lists nothing from the first file.</li>
 </ul>
 </li>
 <li>A plugin that needs another plugin from this catalog lists it under <code>dependencies</code> in its
@@ -213,7 +213,7 @@ marketplaces can be enabled twice, and its hooks then run twice.</p>
 <p>A plugin from another author is listed from its own repository and pinned to one commit, so an install
 never follows someone else’s branch:</p>
 <ul>
-<li><strong>Claude Code</strong>: a <code>github</code>, <code>url</code> or <code>git-subdir</code> source with <code>ref</code> (the release tag, or the branch
+<li><strong>Claude Code</strong>: a <code>url</code> or <code>git-subdir</code> source with <code>ref</code> (the release tag, or the branch
 when there are no releases) and <code>sha</code> (the full commit). A source without <code>.claude-plugin/plugin.json</code>
 needs no wrapper: the catalog entry is then its manifest, so give it <code>description</code>, <code>version</code>,
 <code>author</code>, <code>license</code> and <code>skills</code>, as the <code>playwright</code> entry does.</li>

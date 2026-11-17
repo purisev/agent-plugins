@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-db10e07c.js";
+            window.path_to_searchindex_js = "searchindex-f2607569.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-eefae25e.js"></script>
@@ -466,6 +466,17 @@ hooks needs approval again; the doctor lists the hooks that have no trust record
 <li><strong>The plugin is disabled</strong>, or Claude Code disabled it over a missing dependency. <code>claude plugin list</code>
 shows the state and the reason.</li>
 </ul>
+<h2 id="host-key-verification-failed-when-a-plugin-installs-or-updates"><a class="header" href="#host-key-verification-failed-when-a-plugin-installs-or-updates"><code>Host key verification failed</code> when a plugin installs or updates</a></h2>
+<p>Claude Code clones a plugin whose catalog entry has a <code>github</code> source over SSH, and fails on a machine
+without an SSH key for GitHub. This catalog names every plugin by its https URL, so the error means
+Claude Code still holds an older copy of the catalog. Run the installer again: it refreshes the
+marketplace before it updates the plugins. By hand:</p>
+<pre><code class="language-sh">claude plugin marketplace update purisev &amp;&amp; claude plugin update &lt;plugin&gt;@purisev
+</code></pre>
+<p>The same error from a plugin of another marketplace goes away when git takes GitHub’s SSH addresses
+over https:</p>
+<pre><code class="language-sh">git config --global url."https://github.com/".insteadOf "git@github.com:"
+</code></pre>
 <h2 id="moving-from-the-fork-to-the-upstream-plugin"><a class="header" href="#moving-from-the-fork-to-the-upstream-plugin">Moving from the fork to the upstream plugin</a></h2>
 <p><code>openviking-memory@purisev</code> used to come from the fork <code>purisev/openviking-memory</code>. It now comes from
 the official OpenViking repository. Refresh the marketplace and update the plugin:</p>
@@ -531,11 +542,11 @@ with <code>claude plugin validate &lt;checkout&gt;/.claude-plugin/plugin.json</c
 <code>.codex-plugin/plugin.json</code>.</li>
 <li>Add an entry with the same <code>name</code> to both catalogs:
 <ul>
-<li><code>.claude-plugin/marketplace.json</code> — a <code>github</code> source, or a <code>git-subdir</code> source for a directory of
-purisev/agent-skills, with no <code>ref</code>, so it follows the default branch;</li>
-<li><code>.agents/plugins/marketplace.json</code> — a <code>url</code> or <code>git-subdir</code> source for the same place with
-<code>"ref": "main"</code>, and a <code>policy</code>. Codex has no <code>github</code> source type and lists nothing from the
-first file.</li>
+<li><code>.claude-plugin/marketplace.json</code> — a <code>url</code> source with the https clone URL, or a <code>git-subdir</code>
+source for a directory of purisev/agent-skills, with no <code>ref</code>, so it follows the default branch.
+Not a <code>github</code> source: Claude Code clones that over SSH and fails without an SSH key for GitHub;</li>
+<li><code>.agents/plugins/marketplace.json</code> — the same source with <code>"ref": "main"</code>, and a <code>policy</code>. Codex
+lists nothing from the first file.</li>
 </ul>
 </li>
 <li>A plugin that needs another plugin from this catalog lists it under <code>dependencies</code> in its
@@ -552,7 +563,7 @@ marketplaces can be enabled twice, and its hooks then run twice.</p>
 <p>A plugin from another author is listed from its own repository and pinned to one commit, so an install
 never follows someone else’s branch:</p>
 <ul>
-<li><strong>Claude Code</strong>: a <code>github</code>, <code>url</code> or <code>git-subdir</code> source with <code>ref</code> (the release tag, or the branch
+<li><strong>Claude Code</strong>: a <code>url</code> or <code>git-subdir</code> source with <code>ref</code> (the release tag, or the branch
 when there are no releases) and <code>sha</code> (the full commit). A source without <code>.claude-plugin/plugin.json</code>
 needs no wrapper: the catalog entry is then its manifest, so give it <code>description</code>, <code>version</code>,
 <code>author</code>, <code>license</code> and <code>skills</code>, as the <code>playwright</code> entry does.</li>
