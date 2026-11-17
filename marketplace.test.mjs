@@ -35,15 +35,20 @@ const CODEX_PATHS = { "openviking-memory": "examples/codex-memory-plugin" };
 // pinned here.
 const CODEX_WRAPPERS = ["humanizer", "playwright"];
 
-const cloneUrl = (source) => (source.source === "github" ? `https://github.com/${source.repo}.git` : source.url);
+// Claude Code clones a `github` source over SSH and does not fall back to HTTPS, so it fails on a
+// machine without an SSH key for GitHub. An https clone URL works everywhere.
+test("every plugin is cloned over https", () => {
+  for (const plugin of marketplace.plugins) {
+    assert.ok(["url", "git-subdir"].includes(plugin.source?.source), `${plugin.name} must use a url or git-subdir source`);
+    assert.match(plugin.source.url, /^https:\/\/.+\.git$/, plugin.name);
+    if (plugin.source.source === "git-subdir") assert.ok(plugin.source.path, `${plugin.name} needs a path`);
+  }
+});
 
 test("every plugin follows its own repository or is pinned to a third-party commit", () => {
   for (const plugin of marketplace.plugins) {
     const { source } = plugin;
-    assert.ok(["github", "git-subdir"].includes(source?.source), `${plugin.name} must use a github or git-subdir source`);
-    if (source.source === "github") assert.match(source.repo, /^[\w.-]+\/[\w.-]+$/);
-    else assert.ok(source.path, `${plugin.name} needs a path`);
-    if (OWN.test(cloneUrl(source))) {
+    if (OWN.test(source.url)) {
       assert.equal(source.ref, undefined, `${plugin.name} must follow its default branch`);
       assert.equal(source.sha, undefined, `${plugin.name} must follow its default branch`);
     } else {
@@ -54,7 +59,7 @@ test("every plugin follows its own repository or is pinned to a third-party comm
 });
 
 test("a third-party release tag is pinned together with its commit", () => {
-  for (const plugin of marketplace.plugins.filter((p) => !OWN.test(cloneUrl(p.source)))) {
+  for (const plugin of marketplace.plugins.filter((p) => !OWN.test(p.source.url))) {
     if (plugin.source.ref.startsWith("v")) assert.match(plugin.source.ref, RELEASE_TAG, plugin.name);
   }
 });
@@ -72,17 +77,13 @@ test("the Codex catalog publishes the same plugins under the same marketplace na
 test("every Codex entry installs what its Claude Code entry names", () => {
   for (const plugin of codexCatalog.plugins) {
     const claude = marketplace.plugins.find((p) => p.name === plugin.name).source;
-    const url = cloneUrl(claude);
     if (CODEX_WRAPPERS.includes(plugin.name)) {
       assert.deepEqual(plugin.source, { source: "git-subdir", url: AGENT_SKILLS, path: plugin.name, ref: "main" });
-    } else if (claude.source === "github") {
-      // Codex has no `github` source type; it takes the clone URL.
-      assert.deepEqual(plugin.source, { source: "url", url, ref: claude.ref ?? "main", ...(claude.sha && { sha: claude.sha }) });
     } else {
       assert.deepEqual(plugin.source, {
-        source: "git-subdir",
-        url,
-        path: CODEX_PATHS[plugin.name] ?? claude.path,
+        source: claude.source,
+        url: claude.url,
+        ...(claude.source === "git-subdir" && { path: CODEX_PATHS[plugin.name] ?? claude.path }),
         ref: claude.ref ?? "main",
         ...(claude.sha && { sha: claude.sha }),
       });
@@ -94,7 +95,7 @@ test("every Codex wrapper stands in for a listed third-party plugin", () => {
   for (const name of CODEX_WRAPPERS) {
     const claude = marketplace.plugins.find((p) => p.name === name);
     assert.ok(claude, `${name} is listed`);
-    assert.ok(!OWN.test(cloneUrl(claude.source)), `${name} is third-party`);
+    assert.ok(!OWN.test(claude.source.url), `${name} is third-party`);
   }
 });
 

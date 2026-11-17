@@ -29,6 +29,24 @@ No recalled context, no tools, nothing logged.
 - **The plugin is disabled**, or Claude Code disabled it over a missing dependency. `claude plugin list`
   shows the state and the reason.
 
+## `Host key verification failed` when a plugin installs or updates
+
+Claude Code clones a plugin whose catalog entry has a `github` source over SSH, and fails on a machine
+without an SSH key for GitHub. This catalog names every plugin by its https URL, so the error means
+Claude Code still holds an older copy of the catalog. Run the installer again: it refreshes the
+marketplace before it updates the plugins. By hand:
+
+```sh
+claude plugin marketplace update purisev && claude plugin update <plugin>@purisev
+```
+
+The same error from a plugin of another marketplace goes away when git takes GitHub's SSH addresses
+over https:
+
+```sh
+git config --global url."https://github.com/".insteadOf "git@github.com:"
+```
+
 ## Moving from the fork to the upstream plugin
 
 `openviking-memory@purisev` used to come from the fork `purisev/openviking-memory`. It now comes from

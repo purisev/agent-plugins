@@ -10,11 +10,11 @@ installer and this site. Plugins from other authors follow [Third-party plugins]
    with `claude plugin validate <checkout>/.claude-plugin/plugin.json`. For Codex it also needs a
    `.codex-plugin/plugin.json`.
 2. Add an entry with the same `name` to both catalogs:
-   - `.claude-plugin/marketplace.json` — a `github` source, or a `git-subdir` source for a directory of
-     purisev/agent-skills, with no `ref`, so it follows the default branch;
-   - `.agents/plugins/marketplace.json` — a `url` or `git-subdir` source for the same place with
-     `"ref": "main"`, and a `policy`. Codex has no `github` source type and lists nothing from the
-     first file.
+   - `.claude-plugin/marketplace.json` — a `url` source with the https clone URL, or a `git-subdir`
+     source for a directory of purisev/agent-skills, with no `ref`, so it follows the default branch.
+     Not a `github` source: Claude Code clones that over SSH and fails without an SSH key for GitHub;
+   - `.agents/plugins/marketplace.json` — the same source with `"ref": "main"`, and a `policy`. Codex
+     lists nothing from the first file.
 3. A plugin that needs another plugin from this catalog lists it under `dependencies` in its
    `.claude-plugin/plugin.json`. A bare name resolves inside this marketplace, so Claude Code installs
    it automatically.
@@ -32,7 +32,7 @@ Claude Code tells plugin versions apart by `version` in `plugin.json`, so raise 
 A plugin from another author is listed from its own repository and pinned to one commit, so an install
 never follows someone else's branch:
 
-- **Claude Code**: a `github`, `url` or `git-subdir` source with `ref` (the release tag, or the branch
+- **Claude Code**: a `url` or `git-subdir` source with `ref` (the release tag, or the branch
   when there are no releases) and `sha` (the full commit). A source without `.claude-plugin/plugin.json`
   needs no wrapper: the catalog entry is then its manifest, so give it `description`, `version`,
   `author`, `license` and `skills`, as the `playwright` entry does.
