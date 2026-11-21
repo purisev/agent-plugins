@@ -208,7 +208,6 @@ function Test-Toolchain([string[]]$Plugins, [string[]]$Hosts) {
   elseif (Have 'python') { Say "  python: $(& python --version) (ov-wiki's optional offline helpers also need PyYAML; uv resolves it by itself)" }
   else { Say "  neither uv nor python: ov-wiki works without its optional offline helpers" }
 }
-}
 
 function Get-AgentHost {
   if ($AgentHost.Count -gt 0) {
