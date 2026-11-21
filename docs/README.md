@@ -30,14 +30,23 @@ irm https://ai-plugins.purisev.com/install.ps1 | iex
 
 The installer:
 
-1. checks for `git` and for Node.js 18 or newer, which the hooks of `openviking-memory` and `ponytail`
-   run on. When Node.js is missing it offers the official build, checksum-verified, under your home
-   directory — no root or administrator rights, and nothing is installed without a yes;
-2. finds Claude Code and Codex on `PATH`, adds the `purisev` marketplace to each, and installs or
-   updates the plugins. `langfuse-observability` is installed only with `--langfuse`, and then kept up
-   to date;
-3. offers to create `~/.openviking/ovcli.conf` when there is none, and leaves an existing one alone;
-4. with `--langfuse`, saves the Langfuse keys for each host; see [Send traces to Langfuse](langfuse.md).
+1. finds Claude Code and Codex on `PATH`;
+2. checks for what it and the chosen plugins need, and installs what is missing once you say yes
+   (`--yes` says yes to all of it):
+   - `git`, which the hosts clone plugins with, and `curl` and `tar` when there is something to
+     download: from the system's package manager (`apt-get`, `dnf`, `yum`, `zypper`, `pacman`, `apk`
+     or Homebrew; through `sudo` when you are not root), or `winget` on Windows;
+   - Node.js 18 or newer, which the hooks of `openviking-memory` and `ponytail` run on; 22 or newer when
+     Codex gets `langfuse-observability`;
+   - `uv`, when Claude Code gets `langfuse-observability`.
+
+   Node.js and `uv` are the official builds, checksum-verified, under your home directory, with no root
+   or administrator rights. When `git` cannot be installed, the installer stops before it changes
+   anything and says why;
+3. adds the `purisev` marketplace to each host, and installs or updates the plugins.
+   `langfuse-observability` is installed only with `--langfuse`, and then kept up to date;
+4. offers to create `~/.openviking/ovcli.conf` when there is none, and leaves an existing one alone;
+5. with `--langfuse`, saves the Langfuse keys for each host; see [Send traces to Langfuse](langfuse.md).
 
 It is safe to run again: a second run updates what is there.
 

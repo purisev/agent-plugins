@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, dirname, join } from "node:path";
 import test from "node:test";
@@ -44,7 +44,24 @@ function writeTool(binDir, name, body) {
   }
 }
 
-function sandbox({ claudeMarketplaces = "", claudePlugins = "[]", codexMarketplaces = "", nodeVersion = "22.1.0", hosts = ["claude", "codex"], replies = {}, failing = [] } = {}) {
+// A stand-in package manager installs a stand-in for each package it is asked for.
+const PACKAGE_MANAGER = `
+const fs = require("fs");
+const path = require("path");
+const bin = path.dirname(process.argv[1]);
+const args = process.argv.slice(2);
+const packages = args[0] !== "install" ? [] : args.includes("--id") ? [args[args.indexOf("--id") + 1]] : args.slice(1).filter((a) => !a.startsWith("-"));
+const ids = { "Git.Git": "git" };
+for (const name of packages.map((p) => ids[p] ?? p)) {
+  if (process.platform === "win32") fs.writeFileSync(path.join(bin, name + ".cmd"), "@echo " + name + " version 2.0.0\\r\\n");
+  else fs.writeFileSync(path.join(bin, name), "#!/bin/sh\\necho '" + name + " version 2.0.0'\\n", { mode: 0o755 });
+}
+`;
+
+// What a machine without git, and without any way to install it, has on its PATH.
+const NO_GIT = ["git", "apt-get", "dnf", "yum", "zypper", "pacman", "apk", "brew", "sudo"];
+
+function sandbox({ claudeMarketplaces = "", claudePlugins = "[]", codexMarketplaces = "", nodeVersion = "22.1.0", hosts = ["claude", "codex"], replies = {}, failing = [], git = true, uv = true, hide = [], packageManager = "", uid = "" } = {}) {
   const root = mkdtempSync(join(tmpdir(), "agent-plugins-install-"));
   const bin = join(root, "bin");
   const home = join(root, "home");
@@ -69,7 +86,16 @@ if (prefix !== undefined) process.stdout.write(replies[prefix]);
 if (${JSON.stringify(failing)}.some((f) => \`${name} \${args}\`.startsWith(f))) process.exitCode = 1;
 `);
 
-  tool("git", { "--version": "git version 2.0.0\n" });
+  if (git) tool("git", { "--version": "git version 2.0.0\n" });
+  if (uv) tool("uv", { "--version": "uv 0.13.9\n" });
+  if (packageManager) writeTool(bin, packageManager, `${record.replace("NAME", JSON.stringify(packageManager))}\n${PACKAGE_MANAGER}`);
+  if (uid) {
+    tool("id", { "-u": `${uid}\n` });
+    writeTool(bin, "sudo", `${record.replace("NAME", '"sudo"')}
+const [command, ...rest] = process.argv.slice(2);
+process.exitCode = require("child_process").spawnSync(command, rest, { stdio: "inherit" }).status;
+`);
+  }
   if (nodeVersion) {
     writeTool(bin, "node", `
 const args = process.argv.slice(2);
@@ -81,7 +107,24 @@ else process.exitCode = require("child_process").spawnSync(process.execPath, arg
   if (hosts.includes("claude")) tool("claude", { "plugin marketplace list": claudeMarketplaces, "plugin list --json": claudePlugins, ...replies.claude });
   if (hosts.includes("codex")) tool("codex", { "plugin marketplace list": codexMarketplaces, ...replies.codex });
 
-  return { root, bin, home, log, calls: () => readFileSync(log, "utf-8").split("\n").filter(Boolean), stdin: () => readFileSync(stdinLog, "utf-8") };
+  const path = [bin, ...(hide.length && !WINDOWS ? [filteredSystemPath(root, hide)] : systemPath())];
+  return { root, bin, home, log, path, calls: () => readFileSync(log, "utf-8").split("\n").filter(Boolean), stdin: () => readFileSync(stdinLog, "utf-8") };
+}
+
+// The system's own tools, less the ones named, as links in one directory.
+function filteredSystemPath(root, hide) {
+  const dir = join(root, "system");
+  mkdirSync(dir);
+  // A Set, not existsSync: a dangling link reads as missing, and /bin may be /usr/bin.
+  const linked = new Set(hide);
+  for (const source of systemPath()) {
+    for (const name of readdirSync(source)) {
+      if (linked.has(name)) continue;
+      linked.add(name);
+      symlinkSync(join(source, name), join(dir, name));
+    }
+  }
+  return dir;
 }
 
 // Only calls that change something; listing and version probes are read-only.
@@ -95,7 +138,7 @@ function systemPath() {
 }
 
 function environment(box, extra = {}) {
-  const env = { ...process.env, PATH: [box.bin, ...systemPath()].join(delimiter), HOME: box.home, USERPROFILE: box.home, ...extra };
+  const env = { ...process.env, PATH: box.path.join(delimiter), HOME: box.home, USERPROFILE: box.home, ...extra };
   for (const name of ["OPENVIKING_URL", "OPENVIKING_BASE_URL", "OPENVIKING_CLI_CONFIG_FILE", "CLAUDE_CONFIG_DIR", "CODEX_HOME", "LANGFUSE_BASE_URL", "LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY"]) if (!(name in extra)) delete env[name];
   return env;
 }
@@ -320,6 +363,39 @@ for (const installer of installers) {
     assert.match(result.stdout, /v16\.20\.0 is older than 18/);
   });
 
+  it("without git and a way to install it, the installer stops before touching the hosts", () => {
+    const box = sandbox({ git: false, hide: NO_GIT });
+    const result = installer.run(box, ["yes"]);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stdout + result.stderr, /git is needed/);
+    assert.deepEqual(changes(box.calls()), []);
+  });
+
+  it("without consent uv is not installed, and what that costs is named", () => {
+    const box = sandbox({ uv: false, hosts: ["claude"] });
+    const result = installer.run(box, ["langfuse"]);
+    assert.equal(result.status, 0, result.stderr + result.stdout);
+    assert.match(result.stdout, /uv: not found; Claude Code runs the Langfuse hook with it/);
+    assert.match(result.stdout + result.stderr, /Claude Code sends no traces to Langfuse until uv is on PATH/);
+    assert.ok(!existsSync(join(box.home, ".local", "bin", "uv")));
+  });
+
+  it("Codex with Langfuse needs Node.js 22, and says so", () => {
+    const box = sandbox({ nodeVersion: "20.0.0", hosts: ["codex"] });
+    const result = installer.run(box, ["langfuse"]);
+    assert.equal(result.status, 0, result.stderr + result.stdout);
+    assert.match(result.stdout, /v20\.0\.0 is older than 22/);
+    assert.match(result.stdout + result.stderr, /Codex sends no traces to Langfuse until Node\.js 22 or newer is on PATH/);
+  });
+
+  it("uv is offered for the Langfuse hook in Claude Code", { skip: installer.name === "install.ps1" && !WINDOWS ? "install.ps1 downloads uv on Windows only" : false }, () => {
+    const box = sandbox({ uv: false, hosts: ["claude"] });
+    const result = installer.run(box, ["yes", "dryRun", "langfuse"]);
+    assert.equal(result.status, 0, result.stderr + result.stdout);
+    assert.match(result.stdout, /would download https:\/\/github\.com\/astral-sh\/uv\/releases\/latest\/download\/uv-\S+\.(tar\.gz|zip)/);
+    assert.ok(!existsSync(join(box.home, ".local", "bin")));
+  });
+
   it("no supported host is an error, not a silent success", () => {
     const box = sandbox({ hosts: [] });
     const result = installer.run(box, ["yes"]);
@@ -419,6 +495,57 @@ for (const installer of installers) {
     assert.equal(readFileSync(conf, "utf-8"), '{"url":"https://kept.example.com"}');
   });
 }
+
+const shTest = (title, fn) => test(`install.sh: ${title}`, { skip: WINDOWS || !SH ? "needs a POSIX sh" : false }, fn);
+const runSh = (box, flags, env) => installers[0].run(box, flags, env);
+
+shTest("a missing git is installed with the package manager before any plugin", () => {
+  const box = sandbox({ git: false, hide: NO_GIT, packageManager: "apt-get", uid: "1000" });
+  const result = runSh(box, ["yes"]);
+  assert.equal(result.status, 0, result.stderr + result.stdout);
+  const calls = box.calls();
+  const install = calls.indexOf("sudo apt-get install -y -qq git");
+  assert.ok(calls.includes("sudo apt-get update -qq"), calls.join("\n"));
+  assert.ok(install >= 0, calls.join("\n"));
+  assert.ok(install < calls.indexOf("claude plugin marketplace add purisev/agent-plugins"));
+  assert.match(result.stdout, /git: git version 2\.0\.0/);
+});
+
+shTest("as root the package manager runs without sudo", () => {
+  const box = sandbox({ git: false, hide: NO_GIT, packageManager: "apt-get", uid: "0" });
+  const result = runSh(box, ["yes"]);
+  assert.equal(result.status, 0, result.stderr + result.stdout);
+  assert.ok(box.calls().includes("apt-get install -y -qq git"));
+  assert.ok(!box.calls().some((call) => call.startsWith("sudo ")));
+});
+
+shTest("a missing git is not installed without consent", () => {
+  const box = sandbox({ git: false, hide: NO_GIT, packageManager: "apt-get", uid: "1000" });
+  const result = runSh(box, []);
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /git is needed/);
+  assert.ok(!box.calls().some((call) => call.includes("apt-get")));
+  assert.deepEqual(changes(box.calls()), []);
+});
+
+shTest("curl is installed before a download that needs it", () => {
+  const box = sandbox({ uv: false, hosts: ["claude"], hide: ["curl", ...NO_GIT.slice(1)], packageManager: "apt-get", uid: "1000" });
+  const result = runSh(box, ["yes", "dryRun", "langfuse"]);
+  assert.equal(result.status, 0, result.stderr + result.stdout);
+  assert.match(result.stdout, /curl: not found; needed to download it/);
+  assert.match(result.stdout, /would run: sudo apt-get install -y -qq curl/);
+  assert.match(result.stdout, /would download https:\/\/github\.com\/astral-sh\/uv\//);
+});
+
+test("install.ps1: a missing git is installed with winget before any plugin", { skip: WINDOWS && PWSH ? false : "needs Windows and pwsh" }, () => {
+  const box = sandbox({ git: false, packageManager: "winget" });
+  const result = installers[1].run(box, ["yes"]);
+  assert.equal(result.status, 0, result.stderr + result.stdout);
+  const calls = box.calls();
+  const install = calls.findIndex((call) => call.startsWith("winget install --id Git.Git"));
+  assert.ok(install >= 0, calls.join("\n"));
+  assert.ok(install < calls.indexOf("claude plugin marketplace add purisev/agent-plugins"));
+});
 
 test("install.sh: an unknown option fails before anything runs", { skip: WINDOWS || !SH ? "needs a POSIX sh" : false }, () => {
   const box = sandbox();
