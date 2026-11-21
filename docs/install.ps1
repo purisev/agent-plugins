@@ -182,6 +182,15 @@ function Test-Toolchain([string[]]$Plugins, [string[]]$Hosts) {
   $major = Get-NodeMajor
   if ($major -ge $need) {
     Say "  node: $(& node --version)"
+    # Codex installs Langfuse's plugin with npm pack.
+    if ($wantsLangfuse -and ($Hosts -contains 'codex')) {
+      if (Have 'npm') { Say "  npm: $(& npm --version)" }
+      else {
+        Say "  npm: not found; Codex installs Langfuse's plugin with it"
+        if (Confirm-Step "Install the official Node.js $NodeLine build, which brings npm, under your user profile (no administrator rights needed)?") { Install-Node }
+        else { Warn "continuing without npm; Codex does not get Langfuse's plugin until npm is on PATH" }
+      }
+    }
   } else {
     if ($major -gt 0) { Say "  node: $(& node --version) is older than $need" } else { Say '  node: not found' }
     if ($need -gt $MinNodeMajor) {
@@ -256,7 +265,13 @@ function Install-IntoCodex([string[]]$Plugins) {
   $marketplaces = @(& codex plugin marketplace list 2>$null)
   if ($marketplaces | Where-Object { $_ -match "^$Marketplace\s" }) { Invoke-Tool codex plugin marketplace upgrade $Marketplace }
   else { Invoke-Tool codex plugin marketplace add $MarketplaceRepo }
-  foreach ($name in $Plugins) { Invoke-Tool codex plugin add "$(Get-CodexName $name)@$Marketplace" }
+  foreach ($name in $Plugins) {
+    if (($name -eq $LangfusePlugin) -and -not (Have 'npm') -and -not $DryRun) {
+      Warn "skipping $(Get-CodexName $name)@${Marketplace}: Codex installs it with npm, which is not on PATH"
+      continue
+    }
+    Invoke-Tool codex plugin add "$(Get-CodexName $name)@$Marketplace"
+  }
   $script:CodexInstalled = $true
 }
 
