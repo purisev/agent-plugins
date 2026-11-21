@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, dirname, join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import { Worker } from "node:worker_threads";
 
 // Both installers run against stand-ins for claude, codex, git and node that log
 // their arguments, so nothing is installed and no network is touched.
@@ -12,7 +13,9 @@ import { fileURLToPath } from "node:url";
 const WINDOWS = process.platform === "win32";
 const SH_SCRIPT = fileURLToPath(new URL("./docs/install.sh", import.meta.url));
 const PS_SCRIPT = fileURLToPath(new URL("./docs/install.ps1", import.meta.url));
-const ALL_PLUGINS = JSON.parse(readFileSync(new URL("./.claude-plugin/marketplace.json", import.meta.url), "utf-8")).plugins.map((p) => p.name);
+const LANGFUSE = "langfuse-observability";
+const OPTIONAL_PLUGINS = [LANGFUSE];
+const ALL_PLUGINS = JSON.parse(readFileSync(new URL("./.claude-plugin/marketplace.json", import.meta.url), "utf-8")).plugins.map((p) => p.name).filter((name) => !OPTIONAL_PLUGINS.includes(name));
 
 function findOnPath(name) {
   const extensions = WINDOWS ? [".exe", ".cmd", ""] : [""];
@@ -46,13 +49,16 @@ function sandbox({ claudeMarketplaces = "", claudePlugins = "[]", codexMarketpla
   const bin = join(root, "bin");
   const home = join(root, "home");
   const log = join(root, "calls.log");
+  const stdinLog = join(root, "stdin.log");
   mkdirSync(bin);
   mkdirSync(home);
   writeFileSync(log, "");
+  writeFileSync(stdinLog, "");
   // A function builds the replies once the home directory exists, for replies that name files in it.
   if (typeof replies === "function") replies = replies(home);
 
-  const record = `require("fs").appendFileSync(${JSON.stringify(log)}, [${"NAME"}, ...process.argv.slice(2)].join(" ") + "\\n");`;
+  const record = `require("fs").appendFileSync(${JSON.stringify(log)}, [${"NAME"}, ...process.argv.slice(2)].join(" ") + "\\n");
+if (process.argv.includes("--values-stdin")) require("fs").appendFileSync(${JSON.stringify(stdinLog)}, require("fs").readFileSync(0, "utf-8"));`;
   // A stand-in answers with the reply of the longest prefix that matches its arguments.
   const tool = (name, toolReplies) => writeTool(bin, name, `
 const args = process.argv.slice(2).join(" ");
@@ -75,12 +81,12 @@ else process.exitCode = require("child_process").spawnSync(process.execPath, arg
   if (hosts.includes("claude")) tool("claude", { "plugin marketplace list": claudeMarketplaces, "plugin list --json": claudePlugins, ...replies.claude });
   if (hosts.includes("codex")) tool("codex", { "plugin marketplace list": codexMarketplaces, ...replies.codex });
 
-  return { root, bin, home, log, calls: () => readFileSync(log, "utf-8").split("\n").filter(Boolean) };
+  return { root, bin, home, log, calls: () => readFileSync(log, "utf-8").split("\n").filter(Boolean), stdin: () => readFileSync(stdinLog, "utf-8") };
 }
 
 // Only calls that change something; listing and version probes are read-only.
 function changes(calls) {
-  return calls.filter((call) => /^(claude|codex) plugin /.test(call) && !/ (list|list --json)$/.test(call));
+  return calls.filter((call) => /^(claude|codex) plugin /.test(call) && !/ (list|list --json)$/.test(call) && !/^claude plugin configure \S+ --json$/.test(call));
 }
 
 function systemPath() {
@@ -90,8 +96,26 @@ function systemPath() {
 
 function environment(box, extra = {}) {
   const env = { ...process.env, PATH: [box.bin, ...systemPath()].join(delimiter), HOME: box.home, USERPROFILE: box.home, ...extra };
-  for (const name of ["OPENVIKING_URL", "OPENVIKING_BASE_URL", "OPENVIKING_CLI_CONFIG_FILE", "CLAUDE_CONFIG_DIR", "CODEX_HOME"]) if (!(name in extra)) delete env[name];
+  for (const name of ["OPENVIKING_URL", "OPENVIKING_BASE_URL", "OPENVIKING_CLI_CONFIG_FILE", "CLAUDE_CONFIG_DIR", "CODEX_HOME", "LANGFUSE_BASE_URL", "LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY"]) if (!(name in extra)) delete env[name];
   return env;
+}
+
+const LANGFUSE_KEYS = { LANGFUSE_PUBLIC_KEY: "pk-lf-test", LANGFUSE_SECRET_KEY: "sk-lf-test" };
+
+// A Langfuse server that accepts only LANGFUSE_KEYS. spawnSync blocks this thread, so it answers
+// from a worker thread.
+async function langfuseServer() {
+  const worker = new Worker(`
+    const { parentPort, workerData } = require("worker_threads");
+    const expected = "Basic " + Buffer.from(workerData).toString("base64");
+    const server = require("http").createServer((request, response) => {
+      response.statusCode = request.url === "/api/public/projects" && request.headers.authorization === expected ? 200 : 401;
+      response.end("{}");
+    });
+    server.listen(0, "127.0.0.1", () => parentPort.postMessage(server.address().port));
+  `, { eval: true, workerData: `${LANGFUSE_KEYS.LANGFUSE_PUBLIC_KEY}:${LANGFUSE_KEYS.LANGFUSE_SECRET_KEY}` });
+  const port = await new Promise((resolve) => worker.once("message", resolve));
+  return { url: `http://127.0.0.1:${port}`, close: () => worker.terminate() };
 }
 
 
@@ -166,14 +190,14 @@ const installers = [
   {
     name: "install.sh",
     skip: WINDOWS || !SH ? "needs a POSIX sh" : false,
-    run: (box, flags, env) => spawnSync(SH, [SH_SCRIPT, ...flags.map((f) => ({ yes: "--yes", dryRun: "--dry-run", removeDuplicates: "--remove-duplicates" }[f] || f))], { env: environment(box, env), encoding: "utf-8", stdio: ["ignore", "pipe", "pipe"] }),
+    run: (box, flags, env) => spawnSync(SH, [SH_SCRIPT, ...flags.map((f) => ({ yes: "--yes", dryRun: "--dry-run", removeDuplicates: "--remove-duplicates", langfuse: "--langfuse" }[f] || f))], { env: environment(box, env), encoding: "utf-8", stdio: ["ignore", "pipe", "pipe"] }),
     hostFlag: (host) => ["--host", host],
     pluginFlag: (plugin) => ["--plugin", plugin],
   },
   {
     name: "install.ps1",
     skip: PWSH ? false : "needs pwsh",
-    run: (box, flags, env) => spawnSync(PWSH, ["-NoLogo", "-NoProfile", "-NonInteractive", "-File", PS_SCRIPT, ...flags.map((f) => ({ yes: "-Yes", dryRun: "-DryRun", removeDuplicates: "-RemoveDuplicates" }[f] || f))], { env: environment(box, env), encoding: "utf-8", stdio: ["ignore", "pipe", "pipe"] }),
+    run: (box, flags, env) => spawnSync(PWSH, ["-NoLogo", "-NoProfile", "-NonInteractive", "-File", PS_SCRIPT, ...flags.map((f) => ({ yes: "-Yes", dryRun: "-DryRun", removeDuplicates: "-RemoveDuplicates", langfuse: "-Langfuse" }[f] || f))], { env: environment(box, env), encoding: "utf-8", stdio: ["ignore", "pipe", "pipe"] }),
     hostFlag: (host) => ["-AgentHost", host],
     pluginFlag: (plugin) => ["-Plugin", plugin],
   },
@@ -312,6 +336,78 @@ for (const installer of installers) {
     assert.ok(!existsSync(join(box.home, ".openviking")));
   });
 
+  it("Langfuse is installed into both hosts on request, and keys the server accepts are saved", async () => {
+    const server = await langfuseServer();
+    try {
+      const box = sandbox();
+      const result = installer.run(box, ["yes", "langfuse"], { LANGFUSE_BASE_URL: `${server.url}/`, ...LANGFUSE_KEYS });
+      assert.equal(result.status, 0, result.stderr + result.stdout);
+      assert.deepEqual(changes(box.calls()), [
+        "claude plugin marketplace add purisev/agent-plugins",
+        ...[...ALL_PLUGINS, LANGFUSE].map((plugin) => `claude plugin install ${plugin}@purisev`),
+        "codex plugin marketplace add purisev/agent-plugins",
+        ...[...ALL_PLUGINS, "tracing"].map((plugin) => `codex plugin add ${plugin}@purisev`),
+        `claude plugin configure ${LANGFUSE}@purisev --values-stdin`,
+      ]);
+      const expected = { base_url: server.url, public_key: LANGFUSE_KEYS.LANGFUSE_PUBLIC_KEY, secret_key: LANGFUSE_KEYS.LANGFUSE_SECRET_KEY };
+      assert.deepEqual(JSON.parse(box.stdin()), { LANGFUSE_BASE_URL: expected.base_url, ...LANGFUSE_KEYS });
+      const conf = join(box.home, ".codex", "langfuse.json");
+      assert.deepEqual(JSON.parse(readFileSync(conf, "utf-8")), { enabled: true, ...expected });
+      if (!WINDOWS) assert.equal(statSync(conf).mode & 0o777, 0o600);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("Langfuse keys the server refuses are not saved", async () => {
+    const server = await langfuseServer();
+    try {
+      const box = sandbox();
+      const result = installer.run(box, ["yes", "langfuse"], { LANGFUSE_BASE_URL: server.url, ...LANGFUSE_KEYS, LANGFUSE_SECRET_KEY: "sk-lf-wrong" });
+      assert.equal(result.status, 0, result.stderr + result.stdout);
+      assert.match(result.stdout + result.stderr, /did not accept the keys \(HTTP 401\)/);
+      assert.ok(!changes(box.calls()).some((call) => call.includes("--values-stdin")));
+      assert.ok(!existsSync(join(box.home, ".codex", "langfuse.json")));
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("without Langfuse keys and without a terminal, nothing is asked or saved", () => {
+    const box = sandbox();
+    const result = installer.run(box, ["yes", "langfuse"]);
+    assert.equal(result.status, 0, result.stderr + result.stdout);
+    assert.match(result.stdout, /No Langfuse keys saved/);
+    assert.ok(!changes(box.calls()).some((call) => call.includes("--values-stdin")));
+    assert.ok(!existsSync(join(box.home, ".codex", "langfuse.json")));
+  });
+
+  it("a dry run with Langfuse saves no keys", () => {
+    const box = sandbox();
+    const result = installer.run(box, ["yes", "dryRun", "langfuse"], { LANGFUSE_BASE_URL: "http://127.0.0.1:9", ...LANGFUSE_KEYS });
+    assert.equal(result.status, 0, result.stderr + result.stdout);
+    assert.deepEqual(changes(box.calls()), []);
+    assert.match(result.stdout, /would check the keys against http:\/\/127\.0\.0\.1:9 and save them for: claude codex/);
+    assert.ok(!existsSync(join(box.home, ".codex", "langfuse.json")));
+  });
+
+  it("an installed Langfuse plugin stays up to date without the flag, and its saved keys are kept", () => {
+    const box = sandbox({
+      claudePlugins: JSON.stringify([{ id: `${LANGFUSE}@purisev` }]),
+      replies: { claude: { [`plugin configure ${LANGFUSE}@purisev --json`]: JSON.stringify({ configured: ["LANGFUSE_SECRET_KEY", "LANGFUSE_PUBLIC_KEY"] }) } },
+    });
+    const conf = join(box.home, ".codex", "langfuse.json");
+    writeFile(conf, '{"enabled":true}');
+    const result = installer.run(box, ["yes"]);
+    assert.equal(result.status, 0, result.stderr + result.stdout);
+    const calls = changes(box.calls());
+    assert.ok(calls.includes(`claude plugin update ${LANGFUSE}@purisev`), calls.join("\n"));
+    assert.ok(calls.includes("codex plugin add tracing@purisev"), calls.join("\n"));
+    assert.ok(!calls.some((call) => call.includes("--values-stdin")));
+    assert.match(result.stdout, /Claude Code has the Langfuse keys; leaving them as they are/);
+    assert.equal(readFileSync(conf, "utf-8"), '{"enabled":true}');
+  });
+
   it("an existing connection file is left untouched", () => {
     const box = sandbox({ hosts: ["claude"] });
     mkdirSync(join(box.home, ".openviking"));
@@ -351,13 +447,24 @@ test("install.sh and install.ps1 look for duplicates with the same program", () 
   assert.equal(ps, sh);
 });
 
+test("install.sh and install.ps1 check Langfuse keys with the same program", () => {
+  const read = (file) => readFileSync(file, "utf-8").replace(/\r\n/g, "\n");
+  const sh = read(SH_SCRIPT).match(/^langfuse_check_js\(\) \{\n  cat <<'JS'\n([\s\S]*?)\nJS\n\}/m)[1];
+  const ps = read(PS_SCRIPT).match(/^function Get-LangfuseCheck \{\n  return @'\n([\s\S]*?)\n'@\n\}/m)[1];
+  assert.equal(ps, sh);
+});
+
 test("install.sh and install.ps1 install the same plugins from the same marketplace", () => {
   const sh = readFileSync(SH_SCRIPT, "utf-8");
   const ps = readFileSync(PS_SCRIPT, "utf-8");
   const marketplace = JSON.parse(readFileSync(new URL("./.claude-plugin/marketplace.json", import.meta.url), "utf-8"));
   const names = marketplace.plugins.map((plugin) => plugin.name);
-  assert.match(sh, new RegExp(`ALL_PLUGINS="${names.join(" ")}"`));
-  assert.match(ps, new RegExp(`\\$AllPlugins = @\\(${names.map((n) => `'${n}'`).join(", ")}\\)`));
+  assert.deepEqual([...ALL_PLUGINS, ...OPTIONAL_PLUGINS].sort(), [...names].sort());
+  const quoted = (list) => list.map((n) => `'${n}'`).join(", ");
+  assert.match(sh, new RegExp(`ALL_PLUGINS="${ALL_PLUGINS.join(" ")}"`));
+  assert.match(sh, new RegExp(`OPTIONAL_PLUGINS="${OPTIONAL_PLUGINS.join(" ")}"`));
+  assert.match(ps, new RegExp(`\\$AllPlugins = @\\(${quoted(ALL_PLUGINS)}\\)`));
+  assert.match(ps, new RegExp(`\\[ValidateSet\\(${quoted([...ALL_PLUGINS, ...OPTIONAL_PLUGINS])}\\)\\]`));
   for (const script of [sh, ps]) {
     assert.ok(script.includes(`purisev/agent-plugins`));
     assert.ok(script.trimEnd().split("\n").at(-1).trim().toLowerCase().startsWith("main"), "the entry point must be the last line");

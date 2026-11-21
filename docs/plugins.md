@@ -121,10 +121,19 @@ through Playwright MCP and extracts data from JS-rendered pages. Needs Node.js a
 and `@playwright/mcp` are installed on first use. The skill keeps its own preferences in
 `~/Clawic/data/playwright/`.
 
+## langfuse-observability
+
+Sends every session to a Langfuse server as traces. Claude Code installs
+[langfuse/Claude-Observability-Plugin](https://github.com/langfuse/Claude-Observability-Plugin), release
+**v1.2.2**; Codex installs `@langfuse/codex-observability-plugin` **0.4.3** from npm, under the name
+`tracing`. Both MIT, by Langfuse. The installer adds them only with `--langfuse`.
+Setup, settings and what gets sent: [Send traces to Langfuse](langfuse.md).
+
 ## Third-party plugins
 
-`humanizer`, `ponytail` and `playwright` come from repositories purisev does not maintain. Each is
-pinned to one commit in both catalogs, so an update reaches you only when the pin here changes.
+`humanizer`, `ponytail`, `playwright` and `langfuse-observability` come from repositories purisev does
+not maintain. Each is pinned in both catalogs, to one commit or, for an npm package, to one version, so
+an update reaches you only when the pin here changes.
 
 ## Platforms
 

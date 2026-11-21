@@ -12,6 +12,7 @@ published as one marketplace named `purisev`. An installed plugin has the same i
 | [`ponytail`](plugins.md#ponytail) | Steers the agent towards the smallest change that solves the task. |
 | [`infra`](plugins.md#infra) | Skills for Ansible, Helm, Terraform, Terramate and MetricsQL. |
 | [`playwright`](plugins.md#playwright) | Browser tests, automation and scraping with Playwright. |
+| [`langfuse-observability`](langfuse.md) | Sends every session to a Langfuse server as traces. Installed only on request. |
 
 ## Install
 
@@ -33,8 +34,10 @@ The installer:
    run on. When Node.js is missing it offers the official build, checksum-verified, under your home
    directory — no root or administrator rights, and nothing is installed without a yes;
 2. finds Claude Code and Codex on `PATH`, adds the `purisev` marketplace to each, and installs or
-   updates the plugins;
-3. offers to create `~/.openviking/ovcli.conf` when there is none, and leaves an existing one alone.
+   updates the plugins. `langfuse-observability` is installed only with `--langfuse`, and then kept up
+   to date;
+3. offers to create `~/.openviking/ovcli.conf` when there is none, and leaves an existing one alone;
+4. with `--langfuse`, saves the Langfuse keys for each host; see [Send traces to Langfuse](langfuse.md).
 
 It is safe to run again: a second run updates what is there.
 
@@ -61,7 +64,8 @@ irm https://ai-plugins.purisev.com/install.ps1 -OutFile install.ps1
 | --- | --- | --- |
 | `--host claude` | `-AgentHost claude` | Install into this host only (`claude` or `codex`). Repeatable. |
 | `--plugin openviking-memory` | `-Plugin openviking-memory` | Install this plugin only. Repeatable. |
-| `--no-config` | `-NoConfig` | Do not offer to create the connection file. |
+| `--langfuse` | `-Langfuse` | Also install `langfuse-observability` and save its keys; see [Send traces to Langfuse](langfuse.md). |
+| `--no-config` | `-NoConfig` | Do not set up the connections to OpenViking and Langfuse. |
 | `--remove-duplicates` | `-RemoveDuplicates` | Remove other copies of these plugins and loose copies of their skills; see [Troubleshooting](troubleshooting.md#every-hook-runs-twice-or-a-skill-is-listed-twice). Without it they are only listed. |
 | `-y`, `--yes` | `-Yes` | Answer yes to every question. Nothing is asked, so the connection file is not created. |
 | `--dry-run` | `-DryRun` | Print what would be done and change nothing. |
