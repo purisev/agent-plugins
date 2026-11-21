@@ -36,8 +36,9 @@ The installer:
    - `git`, which the hosts clone plugins with, and `curl` and `tar` when there is something to
      download: from the system's package manager (`apt-get`, `dnf`, `yum`, `zypper`, `pacman`, `apk`
      or Homebrew; through `sudo` when you are not root), or `winget` on Windows;
-   - Node.js 18 or newer, which the hooks of `openviking-memory` and `ponytail` run on; 22 or newer when
-     Codex gets `langfuse-observability`;
+   - Node.js 18 or newer, which the hooks of `openviking-memory` and `ponytail` run on; 22 or newer, and
+     npm, when Codex gets `langfuse-observability`. A Node.js without npm keeps its place, and gets npm
+     from the official build;
    - `uv`, when Claude Code gets `langfuse-observability`.
 
    Node.js and `uv` are the official builds, checksum-verified, under your home directory, with no root

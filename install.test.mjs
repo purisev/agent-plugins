@@ -61,7 +61,7 @@ for (const name of packages.map((p) => ids[p] ?? p)) {
 // What a machine without git, and without any way to install it, has on its PATH.
 const NO_GIT = ["git", "apt-get", "dnf", "yum", "zypper", "pacman", "apk", "brew", "sudo"];
 
-function sandbox({ claudeMarketplaces = "", claudePlugins = "[]", codexMarketplaces = "", nodeVersion = "22.1.0", hosts = ["claude", "codex"], replies = {}, failing = [], git = true, uv = true, hide = [], packageManager = "", uid = "" } = {}) {
+function sandbox({ claudeMarketplaces = "", claudePlugins = "[]", codexMarketplaces = "", nodeVersion = "22.1.0", hosts = ["claude", "codex"], replies = {}, failing = [], git = true, uv = true, npm = true, hide = [], packageManager = "", uid = "" } = {}) {
   const root = mkdtempSync(join(tmpdir(), "agent-plugins-install-"));
   const bin = join(root, "bin");
   const home = join(root, "home");
@@ -88,6 +88,7 @@ if (${JSON.stringify(failing)}.some((f) => \`${name} \${args}\`.startsWith(f))) 
 
   if (git) tool("git", { "--version": "git version 2.0.0\n" });
   if (uv) tool("uv", { "--version": "uv 0.13.9\n" });
+  if (npm && nodeVersion) tool("npm", { "--version": "10.0.0\n" });
   if (packageManager) writeTool(bin, packageManager, `${record.replace("NAME", JSON.stringify(packageManager))}\n${PACKAGE_MANAGER}`);
   if (uid) {
     tool("id", { "-u": `${uid}\n` });
@@ -386,6 +387,26 @@ for (const installer of installers) {
     assert.equal(result.status, 0, result.stderr + result.stdout);
     assert.match(result.stdout, /v20\.0\.0 is older than 22/);
     assert.match(result.stdout + result.stderr, /Codex sends no traces to Langfuse until Node\.js 22 or newer is on PATH/);
+  });
+
+  it("a node without npm gets npm for Langfuse's Codex plugin", { skip: installer.name === "install.ps1" && !WINDOWS ? "install.ps1 downloads Node.js on Windows only" : false }, () => {
+    const box = sandbox({ nodeVersion: "24.0.0", npm: false, hosts: ["codex"] });
+    const result = installer.run(box, ["yes", "dryRun", "langfuse"]);
+    assert.equal(result.status, 0, result.stderr + result.stdout);
+    assert.match(result.stdout, /npm: not found; Codex installs Langfuse's plugin with it/);
+    assert.match(result.stdout, installer.name === "install.sh" ? /would link npm npx into/ : /would download the latest Node\.js v22/);
+  });
+
+  it("without npm, Codex skips Langfuse's plugin and the run goes on", () => {
+    const box = sandbox({ nodeVersion: "24.0.0", npm: false, hosts: ["codex"] });
+    const result = installer.run(box, ["langfuse"]);
+    assert.equal(result.status, 0, result.stderr + result.stdout);
+    assert.match(result.stdout + result.stderr, /skipping tracing@purisev: Codex installs it with npm, which is not on PATH/);
+    assert.deepEqual(changes(box.calls()), [
+      "codex plugin marketplace add purisev/agent-plugins",
+      ...ALL_PLUGINS.map((plugin) => `codex plugin add ${plugin}@purisev`),
+    ]);
+    assert.match(result.stdout, /==> Langfuse/);
   });
 
   it("uv is offered for the Langfuse hook in Claude Code", { skip: installer.name === "install.ps1" && !WINDOWS ? "install.ps1 downloads uv on Windows only" : false }, () => {

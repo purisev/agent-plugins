@@ -36,7 +36,7 @@ updates it, with or without `--langfuse`.
 
 | | Claude Code | Codex |
 | --- | --- | --- |
-| Plugin | `langfuse-observability@purisev`: [Langfuse's Claude Code plugin](https://github.com/langfuse/Claude-Observability-Plugin) v1.2.2 | `tracing@purisev`: [Langfuse's Codex plugin](https://github.com/langfuse/codex-observability-plugin) 0.4.3, from npm |
+| Plugin | `langfuse-observability@purisev`: [Langfuse's Claude Code plugin](https://github.com/langfuse/Claude-Observability-Plugin) v1.2.2 | `tracing@purisev`: [Langfuse's Codex plugin](https://github.com/langfuse/codex-observability-plugin) 0.4.3, from npm, which Codex fetches with `npm pack`; without npm the installer skips it |
 | Keys | the plugin's options; the secret key in the system keychain, or in `~/.claude/.credentials.json` where there is none | `~/.codex/langfuse.json`, readable by you only |
 | Hook | `Stop` and `SessionEnd`, run with `uv`, which the installer offers when it is missing | `Stop`, run with Node.js 22 or newer, which the installer offers in the same way |
 
