@@ -30,6 +30,9 @@ $LangfusePlugin = 'langfuse-observability'
 $MinNodeMajor = 18
 $NodeLine = 'v22'
 $NodeDist = "https://nodejs.org/dist/latest-$NodeLine.x"
+# Codex runs the Langfuse hook on this Node.js; the other hooks need $MinNodeMajor.
+$LangfuseCodexNodeMajor = 22
+$UvDist = 'https://github.com/astral-sh/uv/releases/latest/download'
 $script:CodexInstalled = $false
 
 function Say([string]$Text) { Write-Host $Text }
@@ -100,35 +103,107 @@ function Install-Node {
     Remove-Item -Recurse -Force $work -ErrorAction SilentlyContinue
   }
 
-  $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
-  if (($userPath -split ';') -notcontains $target) {
-    $entries = @($target, $userPath) | Where-Object { $_ }
-    [Environment]::SetEnvironmentVariable('Path', ($entries -join ';'), 'User')
-    Say "  added $target to your user PATH; new terminals pick it up"
-  }
-  $env:Path = "$target;$env:Path"
+  Add-UserPath $target
   Say "  installed $(& (Join-Path $target 'node.exe') --version) under $target"
 }
 
-function Test-Toolchain {
-  Step 'Checking tools'
-  if (-not (Have 'git')) { throw 'git is not on PATH; the hosts clone plugins with it' }
-  Say "  git: $(& git --version)"
+function Add-UserPath([string]$Dir) {
+  $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+  if (($userPath -split ';') -notcontains $Dir) {
+    $entries = @($Dir, $userPath) | Where-Object { $_ }
+    [Environment]::SetEnvironmentVariable('Path', ($entries -join ';'), 'User')
+    Say "  added $Dir to your user PATH; new terminals pick it up"
+  }
+  $env:Path = "$Dir;$env:Path"
+}
 
+function Test-GitWork {
+  if (-not (Have 'git')) { return $false }
+  try { & git --version *> $null; return $LASTEXITCODE -eq 0 } catch { return $false }
+}
+
+function Install-Git {
+  if (-not (OnWindows)) { throw 'git is needed; install it with your package manager, or run install.sh, then run this installer again' }
+  if (-not (Have 'winget')) { throw 'git is needed, and winget is not available to install it; install Git for Windows from https://git-scm.com/download/win, then run this installer again' }
+  if (-not (Confirm-Step 'Install Git for Windows with winget?')) { throw 'git is needed; install it, then run this installer again' }
+  Invoke-Tool winget install --id Git.Git --exact --source winget --silent --accept-package-agreements --accept-source-agreements
+  if ($DryRun) { return }
+  # The Git installer adds itself to the machine PATH, which this session has not read yet.
+  $env:Path = (@($env:Path, [Environment]::GetEnvironmentVariable('Path', 'Machine'), [Environment]::GetEnvironmentVariable('Path', 'User')) | Where-Object { $_ }) -join ';'
+  if (-not (Test-GitWork)) { throw 'git is still not on PATH after installing it; open a new terminal and run this installer again' }
+}
+
+# The official build, checksum-verified, into ~\.local\bin, where uv's own installer puts it.
+function Install-Uv {
+  if (-not (OnWindows)) { Warn 'this script installs uv on Windows only; on Linux and macOS use install.sh'; return }
+  $arch = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'aarch64' } else { 'x86_64' }
+  $archive = "uv-$arch-pc-windows-msvc.zip"
+  $target = Join-Path $HOME '.local\bin'
+  if ($DryRun) {
+    Say "  would download $UvDist/$archive"
+    Say "  would verify it against $archive.sha256 and put uv.exe and uvx.exe into $target"
+    return
+  }
+
+  $work = Join-Path ([IO.Path]::GetTempPath()) ([IO.Path]::GetRandomFileName())
+  New-Item -ItemType Directory -Path $work | Out-Null
+  try {
+    Say "  downloading $UvDist/$archive"
+    $zip = Join-Path $work $archive
+    Invoke-WebRequest -UseBasicParsing "$UvDist/$archive" -OutFile $zip
+    $expected = ((Invoke-WebRequest -UseBasicParsing "$UvDist/$archive.sha256").Content.Trim() -split '\s+')[0]
+    $actual = (Get-FileHash -Algorithm SHA256 $zip).Hash.ToLowerInvariant()
+    if ($actual -ne $expected.ToLowerInvariant()) { throw "checksum mismatch for $archive; nothing was installed" }
+    Expand-Archive -Path $zip -DestinationPath $work -Force
+    New-Item -ItemType Directory -Path $target -Force | Out-Null
+    foreach ($tool in 'uv.exe', 'uvx.exe') {
+      $file = Get-ChildItem -Path $work -Recurse -Filter $tool | Select-Object -First 1
+      Copy-Item $file.FullName (Join-Path $target $tool) -Force
+    }
+  } finally {
+    Remove-Item -Recurse -Force $work -ErrorAction SilentlyContinue
+  }
+  Add-UserPath $target
+  Say "  installed $(& (Join-Path $target 'uv.exe') --version) into $target"
+}
+
+# Runs once the hosts and plugins are known, so it installs what they need and nothing else.
+function Test-Toolchain([string[]]$Plugins, [string[]]$Hosts) {
+  Step 'Checking tools'
+  if (Test-GitWork) { Say "  git: $(& git --version)" }
+  else {
+    Say '  git: not found; the hosts clone plugins with it'
+    Install-Git
+    if (-not $DryRun) { Say "  git: $(& git --version)" }
+  }
+
+  $wantsLangfuse = $Plugins -contains $LangfusePlugin
+  $need = if ($wantsLangfuse -and ($Hosts -contains 'codex')) { $LangfuseCodexNodeMajor } else { $MinNodeMajor }
   $major = Get-NodeMajor
-  if ($major -ge $MinNodeMajor) {
+  if ($major -ge $need) {
     Say "  node: $(& node --version)"
   } else {
-    if ($major -gt 0) { Say "  node: $(& node --version) is older than $MinNodeMajor" } else { Say '  node: not found' }
-    Say '  openviking-memory and ponytail run their hooks with the bare node command.'
+    if ($major -gt 0) { Say "  node: $(& node --version) is older than $need" } else { Say '  node: not found' }
+    if ($need -gt $MinNodeMajor) {
+      Say "  Codex runs the Langfuse hook on Node.js $need or newer."
+      $without = "Codex sends no traces to Langfuse until Node.js $need or newer is on PATH"
+    } else {
+      Say '  openviking-memory and ponytail run their hooks with the bare node command.'
+      $without = "openviking-memory stays inactive until Node.js $MinNodeMajor or newer is on PATH, and ponytail's hooks fail"
+    }
     if (Confirm-Step "Install the official Node.js $NodeLine build under your user profile (no administrator rights needed)?") {
       Install-Node
     } else {
-      Warn "continuing without a usable node; openviking-memory stays inactive until Node.js $MinNodeMajor or newer is on PATH, and ponytail's hooks fail"
+      Warn "continuing without a usable node; $without"
     }
   }
 
   if (Have 'uv') { Say "  uv: $(& uv --version)" }
+  elseif ($wantsLangfuse -and ($Hosts -contains 'claude')) {
+    Say '  uv: not found; Claude Code runs the Langfuse hook with it'
+    if (Confirm-Step 'Install the official uv build into ~\.local\bin (no administrator rights needed)?') { Install-Uv }
+    else { Warn 'continuing without uv; Claude Code sends no traces to Langfuse until uv is on PATH' }
+  }
   elseif (Have 'python3') { Say "  python3: $(& python3 --version) (ov-wiki's optional offline helpers also need PyYAML; uv resolves it by itself)" }
   elseif (Have 'python') { Say "  python: $(& python --version) (ov-wiki's optional offline helpers also need PyYAML; uv resolves it by itself)" }
   else { Say "  neither uv nor python: ov-wiki works without its optional offline helpers" }
@@ -406,20 +481,11 @@ fetch(`${url}/api/public/projects`, { headers: { Authorization: `Basic ${auth}` 
 '@
 }
 
-function Test-LangfuseToolchain([string[]]$Hosts) {
-  if (($Hosts -contains 'claude') -and -not (Have 'uv')) {
-    if ((Have 'python3') -or (Have 'python')) {
-      Warn "Claude Code runs the Langfuse hook with uv. Without it the hook needs Python 3.10 or newer as python3 with the langfuse package: pip install 'langfuse>=4.7,<5'"
-    } else {
-      Warn 'Claude Code runs the Langfuse hook with uv or python3, and neither is on PATH; no traces are sent until one is'
-    }
-  }
-  if ($Hosts -contains 'codex') {
-    if ((Get-NodeMajor) -lt 22) { Warn 'Codex runs the Langfuse hook with Node.js 22 or newer; no traces are sent from Codex until it is on PATH' }
-    $features = @(& codex features list 2>$null)
-    if ($features | Where-Object { $_ -match '^hooks\s.*\sfalse$' }) {
-      Warn 'hooks are off in Codex; set hooks = true under [features] in ~/.codex/config.toml'
-    }
+function Test-CodexHook([string[]]$Hosts) {
+  if ($Hosts -notcontains 'codex') { return }
+  $features = @(& codex features list 2>$null)
+  if ($features | Where-Object { $_ -match '^hooks\s.*\sfalse$' }) {
+    Warn 'hooks are off in Codex; set hooks = true under [features] in ~/.codex/config.toml'
   }
 }
 
@@ -439,7 +505,7 @@ function Write-PrivateFile([string]$Path, [string]$Text) {
 function Initialize-Langfuse([string[]]$Plugins, [string[]]$Hosts) {
   if ($Plugins -notcontains $LangfusePlugin) { return }
   Step 'Langfuse'
-  Test-LangfuseToolchain $Hosts
+  Test-CodexHook $Hosts
   if ($NoConfig) { return }
 
   $codexHome = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $HOME '.codex' }
@@ -514,11 +580,11 @@ function Main {
   if ($DryRun) { Say 'Dry run: nothing will be changed.' }
   $script:Stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
 
-  Test-Toolchain
   $hosts = @(Get-AgentHost)
   if ($Langfuse -or (($Plugin.Count -eq 0) -and (Test-LangfuseInstalled $hosts))) {
     if ($plugins -notcontains $LangfusePlugin) { $plugins = @($plugins) + $LangfusePlugin }
   }
+  Test-Toolchain $plugins $hosts
   foreach ($name in $hosts) {
     if ($name -eq 'claude') { Install-IntoClaude $plugins } else { Install-IntoCodex $plugins }
     Resolve-Duplicate $name

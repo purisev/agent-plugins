@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-62f04acc.js";
+            window.path_to_searchindex_js = "searchindex-837cf68b.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-1c48392a.js"></script>
@@ -207,14 +207,34 @@ published as one marketplace named <code>purisev</code>. An installed plugin has
 </code></pre>
 <p>The installer:</p>
 <ol>
-<li>checks for <code>git</code> and for Node.js 18 or newer, which the hooks of <code>openviking-memory</code> and <code>ponytail</code>
-run on. When Node.js is missing it offers the official build, checksum-verified, under your home
-directory — no root or administrator rights, and nothing is installed without a yes;</li>
-<li>finds Claude Code and Codex on <code>PATH</code>, adds the <code>purisev</code> marketplace to each, and installs or
-updates the plugins. <code>langfuse-observability</code> is installed only with <code>--langfuse</code>, and then kept up
-to date;</li>
-<li>offers to create <code>~/.openviking/ovcli.conf</code> when there is none, and leaves an existing one alone;</li>
-<li>with <code>--langfuse</code>, saves the Langfuse keys for each host; see <a href="#send-traces-to-langfuse">Send traces to Langfuse</a>.</li>
+<li>
+<p>finds Claude Code and Codex on <code>PATH</code>;</p>
+</li>
+<li>
+<p>checks for what it and the chosen plugins need, and installs what is missing once you say yes
+(<code>--yes</code> says yes to all of it):</p>
+<ul>
+<li><code>git</code>, which the hosts clone plugins with, and <code>curl</code> and <code>tar</code> when there is something to
+download: from the system’s package manager (<code>apt-get</code>, <code>dnf</code>, <code>yum</code>, <code>zypper</code>, <code>pacman</code>, <code>apk</code>
+or Homebrew; through <code>sudo</code> when you are not root), or <code>winget</code> on Windows;</li>
+<li>Node.js 18 or newer, which the hooks of <code>openviking-memory</code> and <code>ponytail</code> run on; 22 or newer when
+Codex gets <code>langfuse-observability</code>;</li>
+<li><code>uv</code>, when Claude Code gets <code>langfuse-observability</code>.</li>
+</ul>
+<p>Node.js and <code>uv</code> are the official builds, checksum-verified, under your home directory, with no root
+or administrator rights. When <code>git</code> cannot be installed, the installer stops before it changes
+anything and says why;</p>
+</li>
+<li>
+<p>adds the <code>purisev</code> marketplace to each host, and installs or updates the plugins.
+<code>langfuse-observability</code> is installed only with <code>--langfuse</code>, and then kept up to date;</p>
+</li>
+<li>
+<p>offers to create <code>~/.openviking/ovcli.conf</code> when there is none, and leaves an existing one alone;</p>
+</li>
+<li>
+<p>with <code>--langfuse</code>, saves the Langfuse keys for each host; see <a href="#send-traces-to-langfuse">Send traces to Langfuse</a>.</p>
+</li>
 </ol>
 <p>It is safe to run again: a second run updates what is there.</p>
 <h3 id="look-before-you-run"><a class="header" href="#look-before-you-run">Look before you run</a></h3>
@@ -348,7 +368,7 @@ updates it, with or without <code>--langfuse</code>.</p>
 <tbody>
 <tr><td>Plugin</td><td><code>langfuse-observability@purisev</code>: <a href="https://github.com/langfuse/Claude-Observability-Plugin">Langfuse’s Claude Code plugin</a> v1.2.2</td><td><code>tracing@purisev</code>: <a href="https://github.com/langfuse/codex-observability-plugin">Langfuse’s Codex plugin</a> 0.4.3, from npm</td></tr>
 <tr><td>Keys</td><td>the plugin’s options; the secret key in the system keychain, or in <code>~/.claude/.credentials.json</code> where there is none</td><td><code>~/.codex/langfuse.json</code>, readable by you only</td></tr>
-<tr><td>Hook</td><td><code>Stop</code> and <code>SessionEnd</code>, run with <code>uv</code>, or with <code>python3</code> 3.10+ that has <code>langfuse&gt;=4.7,&lt;5</code></td><td><code>Stop</code>, run with Node.js 22 or newer</td></tr>
+<tr><td>Hook</td><td><code>Stop</code> and <code>SessionEnd</code>, run with <code>uv</code>, which the installer offers when it is missing</td><td><code>Stop</code>, run with Node.js 22 or newer, which the installer offers in the same way</td></tr>
 </tbody>
 </table>
 </div>
