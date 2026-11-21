@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-f2607569.js";
+            window.path_to_searchindex_js = "searchindex-62f04acc.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-eefae25e.js"></script>
+        <script src="toc-1c48392a.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -194,6 +194,7 @@ published as one marketplace named <code>purisev</code>. An installed plugin has
 <tr><td><a href="#ponytail"><code>ponytail</code></a></td><td>Steers the agent towards the smallest change that solves the task.</td></tr>
 <tr><td><a href="#infra"><code>infra</code></a></td><td>Skills for Ansible, Helm, Terraform, Terramate and MetricsQL.</td></tr>
 <tr><td><a href="#playwright"><code>playwright</code></a></td><td>Browser tests, automation and scraping with Playwright.</td></tr>
+<tr><td><a href="#send-traces-to-langfuse"><code>langfuse-observability</code></a></td><td>Sends every session to a Langfuse server as traces. Installed only on request.</td></tr>
 </tbody>
 </table>
 </div>
@@ -210,8 +211,10 @@ published as one marketplace named <code>purisev</code>. An installed plugin has
 run on. When Node.js is missing it offers the official build, checksum-verified, under your home
 directory — no root or administrator rights, and nothing is installed without a yes;</li>
 <li>finds Claude Code and Codex on <code>PATH</code>, adds the <code>purisev</code> marketplace to each, and installs or
-updates the plugins;</li>
-<li>offers to create <code>~/.openviking/ovcli.conf</code> when there is none, and leaves an existing one alone.</li>
+updates the plugins. <code>langfuse-observability</code> is installed only with <code>--langfuse</code>, and then kept up
+to date;</li>
+<li>offers to create <code>~/.openviking/ovcli.conf</code> when there is none, and leaves an existing one alone;</li>
+<li>with <code>--langfuse</code>, saves the Langfuse keys for each host; see <a href="#send-traces-to-langfuse">Send traces to Langfuse</a>.</li>
 </ol>
 <p>It is safe to run again: a second run updates what is there.</p>
 <h3 id="look-before-you-run"><a class="header" href="#look-before-you-run">Look before you run</a></h3>
@@ -234,7 +237,8 @@ sh install.sh
 <tbody>
 <tr><td><code>--host claude</code></td><td><code>-AgentHost claude</code></td><td>Install into this host only (<code>claude</code> or <code>codex</code>). Repeatable.</td></tr>
 <tr><td><code>--plugin openviking-memory</code></td><td><code>-Plugin openviking-memory</code></td><td>Install this plugin only. Repeatable.</td></tr>
-<tr><td><code>--no-config</code></td><td><code>-NoConfig</code></td><td>Do not offer to create the connection file.</td></tr>
+<tr><td><code>--langfuse</code></td><td><code>-Langfuse</code></td><td>Also install <code>langfuse-observability</code> and save its keys; see <a href="#send-traces-to-langfuse">Send traces to Langfuse</a>.</td></tr>
+<tr><td><code>--no-config</code></td><td><code>-NoConfig</code></td><td>Do not set up the connections to OpenViking and Langfuse.</td></tr>
 <tr><td><code>--remove-duplicates</code></td><td><code>-RemoveDuplicates</code></td><td>Remove other copies of these plugins and loose copies of their skills; see <a href="#every-hook-runs-twice-or-a-skill-is-listed-twice">Troubleshooting</a>. Without it they are only listed.</td></tr>
 <tr><td><code>-y</code>, <code>--yes</code></td><td><code>-Yes</code></td><td>Answer yes to every question. Nothing is asked, so the connection file is not created.</td></tr>
 <tr><td><code>--dry-run</code></td><td><code>-DryRun</code></td><td>Print what would be done and change nothing.</td></tr>
@@ -312,6 +316,63 @@ variable too.</p>
 <p>Ask the agent to run the <code>ov-memory-doctor</code> skill. Its Configuration section names the source of every
 value (<code>← ~/.openviking/ovcli.conf</code>, <code>← env</code>) and its Connection section proves the key against the
 server: <code>/health</code> answers 200 even with a wrong key, so reachability alone proves nothing.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="send-traces-to-langfuse"><a class="header" href="#send-traces-to-langfuse">Send traces to Langfuse</a></h1>
+<p><code>langfuse-observability</code> sends every Claude Code and Codex session to a <a href="https://langfuse.com">Langfuse</a>
+server. Each turn becomes a trace with the prompt, the model calls, every tool call with its input and
+output, and token usage. Langfuse Cloud and a self-hosted Langfuse v3 or newer both work.</p>
+<p>The installer adds it only when asked to, because everything the agent sees reaches the server:
+prompts, command output, the contents of the files it reads, and any secrets among them. The Claude
+Code plugin cuts each field to 20 000 characters; the Codex plugin sends everything. Neither masks
+anything.</p>
+<h2 id="install-1"><a class="header" href="#install-1">Install</a></h2>
+<p>Create a project in Langfuse and an API key pair for it (project settings, API Keys). Both hosts send to
+that project.</p>
+<pre><code class="language-sh">curl -fsSL https://ai-plugins.purisev.com/install.sh | sh -s -- --langfuse
+</code></pre>
+<pre><code class="language-powershell">&amp; ([scriptblock]::Create((irm https://ai-plugins.purisev.com/install.ps1))) -Langfuse
+</code></pre>
+<p>The installer asks for the server URL and both keys, checks them against the server, and saves them for
+each host. It saves nothing the server refuses. Without a terminal it reads them from
+<code>LANGFUSE_BASE_URL</code>, <code>LANGFUSE_PUBLIC_KEY</code> and <code>LANGFUSE_SECRET_KEY</code>:</p>
+<pre><code class="language-sh">export LANGFUSE_BASE_URL=https://langfuse.example.com LANGFUSE_PUBLIC_KEY=pk-lf-... LANGFUSE_SECRET_KEY=sk-lf-...
+curl -fsSL https://ai-plugins.purisev.com/install.sh | sh -s -- --langfuse --yes
+</code></pre>
+<p>Keys a host already has are left alone. Once the plugin is installed, every later run of the installer
+updates it, with or without <code>--langfuse</code>.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th></th><th>Claude Code</th><th>Codex</th></tr>
+</thead>
+<tbody>
+<tr><td>Plugin</td><td><code>langfuse-observability@purisev</code>: <a href="https://github.com/langfuse/Claude-Observability-Plugin">Langfuse’s Claude Code plugin</a> v1.2.2</td><td><code>tracing@purisev</code>: <a href="https://github.com/langfuse/codex-observability-plugin">Langfuse’s Codex plugin</a> 0.4.3, from npm</td></tr>
+<tr><td>Keys</td><td>the plugin’s options; the secret key in the system keychain, or in <code>~/.claude/.credentials.json</code> where there is none</td><td><code>~/.codex/langfuse.json</code>, readable by you only</td></tr>
+<tr><td>Hook</td><td><code>Stop</code> and <code>SessionEnd</code>, run with <code>uv</code>, or with <code>python3</code> 3.10+ that has <code>langfuse&gt;=4.7,&lt;5</code></td><td><code>Stop</code>, run with Node.js 22 or newer</td></tr>
+</tbody>
+</table>
+</div>
+<p>Codex installs a plugin only under the name its manifest gives, so there it is <code>tracing</code>. Codex asks to
+approve its hook once (<code>/hooks</code>), and again after an update that changes it.</p>
+<h2 id="settings"><a class="header" href="#settings">Settings</a></h2>
+<p>Claude Code: <code>/plugin configure langfuse-observability@purisev</code> lists the options, among them a user ID
+for every trace, the field length limit, image capture, and a debug log in
+<code>~/.claude/state/langfuse_hook.log</code>.</p>
+<p>Codex: <code>~/.codex/langfuse.json</code>, a project’s own <code>.codex/langfuse.json</code>, or <code>LANGFUSE_*</code> variables in
+the environment, which take precedence. The keys are listed in
+<a href="https://langfuse.com/integrations/developer-tools/codex">Langfuse’s Codex documentation</a>.</p>
+<p>Both plugins upload images to Langfuse. A self-hosted server stores them only with a media bucket
+configured (<code>LANGFUSE_S3_MEDIA_UPLOAD_BUCKET</code>); without one, turn off image capture in the Claude Code
+options.</p>
+<h2 id="stop-sending"><a class="header" href="#stop-sending">Stop sending</a></h2>
+<ul>
+<li>Claude Code: <code>claude plugin disable langfuse-observability@purisev</code>, or <code>uninstall</code> to remove it.</li>
+<li>Codex: <code>"enabled": false</code> in <code>~/.codex/langfuse.json</code>, or <code>codex plugin remove tracing@purisev</code>.</li>
+</ul>
+<h2 id="check-it-1"><a class="header" href="#check-it-1">Check it</a></h2>
+<p>Finish one turn in each host and open Tracing in the Langfuse project. Nothing there after a turn: in
+Claude Code, set the debug option and read its log; in Codex, check that the hook is approved in
+<code>/hooks</code> and that <code>node --version</code> reports 22 or newer.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="plugins"><a class="header" href="#plugins">Plugins</a></h1>
 <h2 id="openviking-memory"><a class="header" href="#openviking-memory">openviking-memory</a></h2>
@@ -423,9 +484,16 @@ commit. MIT. Claude Code installs it from that repository, where the skill is li
 through Playwright MCP and extracts data from JS-rendered pages. Needs Node.js and <code>npx</code>; Playwright
 and <code>@playwright/mcp</code> are installed on first use. The skill keeps its own preferences in
 <code>~/Clawic/data/playwright/</code>.</p>
+<h2 id="langfuse-observability"><a class="header" href="#langfuse-observability">langfuse-observability</a></h2>
+<p>Sends every session to a Langfuse server as traces. Claude Code installs
+<a href="https://github.com/langfuse/Claude-Observability-Plugin">langfuse/Claude-Observability-Plugin</a>, release
+<strong>v1.2.2</strong>; Codex installs <code>@langfuse/codex-observability-plugin</code> <strong>0.4.3</strong> from npm, under the name
+<code>tracing</code>. Both MIT, by Langfuse. The installer adds them only with <code>--langfuse</code>.
+Setup, settings and what gets sent: <a href="#send-traces-to-langfuse">Send traces to Langfuse</a>.</p>
 <h2 id="third-party-plugins"><a class="header" href="#third-party-plugins">Third-party plugins</a></h2>
-<p><code>humanizer</code>, <code>ponytail</code> and <code>playwright</code> come from repositories purisev does not maintain. Each is
-pinned to one commit in both catalogs, so an update reaches you only when the pin here changes.</p>
+<p><code>humanizer</code>, <code>ponytail</code>, <code>playwright</code> and <code>langfuse-observability</code> come from repositories purisev does
+not maintain. Each is pinned in both catalogs, to one commit or, for an npm package, to one version, so
+an update reaches you only when the pin here changes.</p>
 <h2 id="platforms"><a class="header" href="#platforms">Platforms</a></h2>
 <div class="table-wrapper">
 <table>
@@ -553,7 +621,9 @@ lists nothing from the first file.</li>
 <code>.claude-plugin/plugin.json</code>. A bare name resolves inside this marketplace, so Claude Code installs
 it automatically.</li>
 <li>Add the plugin to <code>ALL_PLUGINS</code> in <code>docs/install.sh</code> and to <code>$AllPlugins</code> and the <code>-Plugin</code>
-<code>ValidateSet</code> in <code>docs/install.ps1</code>, and give it a section in <code>docs/plugins.md</code>.</li>
+<code>ValidateSet</code> in <code>docs/install.ps1</code>, and give it a section in <code>docs/plugins.md</code>. A plugin installed
+only on request goes to <code>OPTIONAL_PLUGINS</code> instead of <code>ALL_PLUGINS</code>, and in <code>install.ps1</code> only to the
+<code>ValidateSet</code>.</li>
 <li>Run the checks and open a pull request.</li>
 </ol>
 <p>Do not give a plugin repository a <code>marketplace.json</code> of its own. The same plugin reachable through two
@@ -570,7 +640,9 @@ needs no wrapper: the catalog entry is then its manifest, so give it <code>descr
 <li><strong>Codex</strong>: the same repository, <code>ref</code> and <code>sha</code>, when the source has a manifest Codex reads and its
 skills under <code>skills/</code>. Otherwise Codex installs the plugin empty, without an error. Such a plugin
 gets a Codex-only copy in purisev/agent-skills, whose README describes the layout, and joins
-<code>CODEX_WRAPPERS</code> in <code>marketplace.test.mjs</code>.</li>
+<code>CODEX_WRAPPERS</code> in <code>marketplace.test.mjs</code>. A plugin its author publishes for Codex on npm is
+listed with an <code>npm</code> source and an exact <code>version</code>; when its manifest gives another name, the Codex
+entry takes that name, and <code>CODEX_NAMES</code> in <code>marketplace.test.mjs</code> pairs it with the Claude Code one.</li>
 </ul>
 <p>An install that succeeds does not prove that Codex found the skills. <code>codex debug prompt-input hi</code>
 prints the prompt Codex would send, and its skills section lists every skill it loaded.</p>

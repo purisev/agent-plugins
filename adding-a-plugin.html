@@ -35,10 +35,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-f2607569.js";
+            window.path_to_searchindex_js = "searchindex-62f04acc.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-eefae25e.js"></script>
+        <script src="toc-1c48392a.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -203,7 +203,9 @@ lists nothing from the first file.</li>
 <code>.claude-plugin/plugin.json</code>. A bare name resolves inside this marketplace, so Claude Code installs
 it automatically.</li>
 <li>Add the plugin to <code>ALL_PLUGINS</code> in <code>docs/install.sh</code> and to <code>$AllPlugins</code> and the <code>-Plugin</code>
-<code>ValidateSet</code> in <code>docs/install.ps1</code>, and give it a section in <code>docs/plugins.md</code>.</li>
+<code>ValidateSet</code> in <code>docs/install.ps1</code>, and give it a section in <code>docs/plugins.md</code>. A plugin installed
+only on request goes to <code>OPTIONAL_PLUGINS</code> instead of <code>ALL_PLUGINS</code>, and in <code>install.ps1</code> only to the
+<code>ValidateSet</code>.</li>
 <li>Run the checks and open a pull request.</li>
 </ol>
 <p>Do not give a plugin repository a <code>marketplace.json</code> of its own. The same plugin reachable through two
@@ -220,7 +222,9 @@ needs no wrapper: the catalog entry is then its manifest, so give it <code>descr
 <li><strong>Codex</strong>: the same repository, <code>ref</code> and <code>sha</code>, when the source has a manifest Codex reads and its
 skills under <code>skills/</code>. Otherwise Codex installs the plugin empty, without an error. Such a plugin
 gets a Codex-only copy in purisev/agent-skills, whose README describes the layout, and joins
-<code>CODEX_WRAPPERS</code> in <code>marketplace.test.mjs</code>.</li>
+<code>CODEX_WRAPPERS</code> in <code>marketplace.test.mjs</code>. A plugin its author publishes for Codex on npm is
+listed with an <code>npm</code> source and an exact <code>version</code>; when its manifest gives another name, the Codex
+entry takes that name, and <code>CODEX_NAMES</code> in <code>marketplace.test.mjs</code> pairs it with the Claude Code one.</li>
 </ul>
 <p>An install that succeeds does not prove that Codex found the skills. <code>codex debug prompt-input hi</code>
 prints the prompt Codex would send, and its skills section lists every skill it loaded.</p>

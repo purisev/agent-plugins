@@ -35,10 +35,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-f2607569.js";
+            window.path_to_searchindex_js = "searchindex-62f04acc.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-eefae25e.js"></script>
+        <script src="toc-1c48392a.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -196,6 +196,7 @@ published as one marketplace named <code>purisev</code>. An installed plugin has
 <tr><td><a href="plugins.html#ponytail"><code>ponytail</code></a></td><td>Steers the agent towards the smallest change that solves the task.</td></tr>
 <tr><td><a href="plugins.html#infra"><code>infra</code></a></td><td>Skills for Ansible, Helm, Terraform, Terramate and MetricsQL.</td></tr>
 <tr><td><a href="plugins.html#playwright"><code>playwright</code></a></td><td>Browser tests, automation and scraping with Playwright.</td></tr>
+<tr><td><a href="langfuse.html"><code>langfuse-observability</code></a></td><td>Sends every session to a Langfuse server as traces. Installed only on request.</td></tr>
 </tbody>
 </table>
 </div>
@@ -212,8 +213,10 @@ published as one marketplace named <code>purisev</code>. An installed plugin has
 run on. When Node.js is missing it offers the official build, checksum-verified, under your home
 directory — no root or administrator rights, and nothing is installed without a yes;</li>
 <li>finds Claude Code and Codex on <code>PATH</code>, adds the <code>purisev</code> marketplace to each, and installs or
-updates the plugins;</li>
-<li>offers to create <code>~/.openviking/ovcli.conf</code> when there is none, and leaves an existing one alone.</li>
+updates the plugins. <code>langfuse-observability</code> is installed only with <code>--langfuse</code>, and then kept up
+to date;</li>
+<li>offers to create <code>~/.openviking/ovcli.conf</code> when there is none, and leaves an existing one alone;</li>
+<li>with <code>--langfuse</code>, saves the Langfuse keys for each host; see <a href="langfuse.html">Send traces to Langfuse</a>.</li>
 </ol>
 <p>It is safe to run again: a second run updates what is there.</p>
 <h3 id="look-before-you-run"><a class="header" href="#look-before-you-run">Look before you run</a></h3>
@@ -236,7 +239,8 @@ sh install.sh
 <tbody>
 <tr><td><code>--host claude</code></td><td><code>-AgentHost claude</code></td><td>Install into this host only (<code>claude</code> or <code>codex</code>). Repeatable.</td></tr>
 <tr><td><code>--plugin openviking-memory</code></td><td><code>-Plugin openviking-memory</code></td><td>Install this plugin only. Repeatable.</td></tr>
-<tr><td><code>--no-config</code></td><td><code>-NoConfig</code></td><td>Do not offer to create the connection file.</td></tr>
+<tr><td><code>--langfuse</code></td><td><code>-Langfuse</code></td><td>Also install <code>langfuse-observability</code> and save its keys; see <a href="langfuse.html">Send traces to Langfuse</a>.</td></tr>
+<tr><td><code>--no-config</code></td><td><code>-NoConfig</code></td><td>Do not set up the connections to OpenViking and Langfuse.</td></tr>
 <tr><td><code>--remove-duplicates</code></td><td><code>-RemoveDuplicates</code></td><td>Remove other copies of these plugins and loose copies of their skills; see <a href="troubleshooting.html#every-hook-runs-twice-or-a-skill-is-listed-twice">Troubleshooting</a>. Without it they are only listed.</td></tr>
 <tr><td><code>-y</code>, <code>--yes</code></td><td><code>-Yes</code></td><td>Answer yes to every question. Nothing is asked, so the connection file is not created.</td></tr>
 <tr><td><code>--dry-run</code></td><td><code>-DryRun</code></td><td>Print what would be done and change nothing.</td></tr>
