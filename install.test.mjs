@@ -115,9 +115,12 @@ else process.exitCode = require("child_process").spawnSync(process.execPath, arg
 function filteredSystemPath(root, hide) {
   const dir = join(root, "system");
   mkdirSync(dir);
+  // A Set, not existsSync: a dangling link reads as missing, and /bin may be /usr/bin.
+  const linked = new Set(hide);
   for (const source of systemPath()) {
     for (const name of readdirSync(source)) {
-      if (hide.includes(name) || existsSync(join(dir, name))) continue;
+      if (linked.has(name)) continue;
+      linked.add(name);
       symlinkSync(join(source, name), join(dir, name));
     }
   }
