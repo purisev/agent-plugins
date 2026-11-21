@@ -158,12 +158,14 @@ sha256_of() {
 
 # The official build, checksum-verified, unpacked under ~/.local. No root and no
 # package manager, so it cannot disturb a system Node.js.
+# Links node, npm and npx, or only the tools named in $1.
 install_node() {
+  tools=${1:-node npm npx}
   platform=$(node_platform) || die "no official Node.js build is known for $(uname -s) $(uname -m); install Node.js $MIN_NODE_MAJOR or newer yourself"
   if [ "$DRY_RUN" -eq 1 ]; then
     say "  would download the latest Node.js $NODE_LINE for $platform from $NODE_DIST"
     say "  would verify it against SHASUMS256.txt and unpack it under $HOME/.local/lib/nodejs"
-    say "  would link node, npm and npx into $HOME/.local/bin"
+    say "  would link $tools into $HOME/.local/bin"
     return 0
   fi
 
@@ -181,11 +183,11 @@ install_node() {
   mkdir -p "$HOME/.local/lib/nodejs" "$HOME/.local/bin"
   tar -xzf "$work/$archive" -C "$HOME/.local/lib/nodejs"
   root="$HOME/.local/lib/nodejs/${archive%.tar.gz}"
-  for tool in node npm npx; do ln -sfn "$root/bin/$tool" "$HOME/.local/bin/$tool"; done
+  for tool in $tools; do ln -sfn "$root/bin/$tool" "$HOME/.local/bin/$tool"; done
   rm -rf "$work"
   PATH="$HOME/.local/bin:$PATH"
   export PATH
-  say "  installed $("$HOME/.local/bin/node" --version) under $root"
+  say "  installed $tools from ${archive%.tar.gz} under $root"
 }
 
 path_has_local_bin() { case ":$PATH:" in *":$HOME/.local/bin:"*) return 0 ;; *) return 1 ;; esac; }
@@ -310,6 +312,7 @@ check_node() {
   if selected "$LANGFUSE_PLUGIN" && on_host codex; then need=$LANGFUSE_CODEX_NODE_MAJOR; fi
   if node_is_usable "$need"; then
     say "  node: $(node --version)"
+    check_npm
     return 0
   fi
   if have node; then say "  node: $(node --version) is older than $need"; else say "  node: not found"; fi
@@ -325,6 +328,23 @@ check_node() {
     installed_into_local_bin node
   else
     warn "continuing without a usable node; $without"
+  fi
+}
+
+# Codex installs Langfuse's plugin with npm pack. A node without npm gets npm from the official build,
+# which runs on that node and leaves it in place.
+check_npm() {
+  if ! selected "$LANGFUSE_PLUGIN" || ! on_host codex; then return 0; fi
+  if have npm; then
+    say "  npm: $(npm --version)"
+    return 0
+  fi
+  say "  npm: not found; Codex installs Langfuse's plugin with it"
+  if confirm "Add npm and npx from the official Node.js $NODE_LINE build to ~/.local/bin (no root needed)?" && download_tools_ready; then
+    install_node "npm npx"
+    installed_into_local_bin npm
+  else
+    warn "continuing without npm; Codex does not get Langfuse's plugin until npm is on PATH"
   fi
 }
 
@@ -417,6 +437,10 @@ install_into_codex() {
     run codex plugin marketplace add "$MARKETPLACE_REPO"
   fi
   for plugin in $PLUGINS; do
+    if [ "$plugin" = "$LANGFUSE_PLUGIN" ] && ! have npm && [ "$DRY_RUN" -eq 0 ]; then
+      warn "skipping $(codex_name "$plugin")@$MARKETPLACE: Codex installs it with npm, which is not on PATH"
+      continue
+    fi
     run codex plugin add "$(codex_name "$plugin")@$MARKETPLACE"
   done
   CODEX_INSTALLED=1

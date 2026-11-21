@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-837cf68b.js";
+            window.path_to_searchindex_js = "searchindex-9899ec68.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-1c48392a.js"></script>
@@ -217,8 +217,9 @@ published as one marketplace named <code>purisev</code>. An installed plugin has
 <li><code>git</code>, which the hosts clone plugins with, and <code>curl</code> and <code>tar</code> when there is something to
 download: from the system’s package manager (<code>apt-get</code>, <code>dnf</code>, <code>yum</code>, <code>zypper</code>, <code>pacman</code>, <code>apk</code>
 or Homebrew; through <code>sudo</code> when you are not root), or <code>winget</code> on Windows;</li>
-<li>Node.js 18 or newer, which the hooks of <code>openviking-memory</code> and <code>ponytail</code> run on; 22 or newer when
-Codex gets <code>langfuse-observability</code>;</li>
+<li>Node.js 18 or newer, which the hooks of <code>openviking-memory</code> and <code>ponytail</code> run on; 22 or newer, and
+npm, when Codex gets <code>langfuse-observability</code>. A Node.js without npm keeps its place, and gets npm
+from the official build;</li>
 <li><code>uv</code>, when Claude Code gets <code>langfuse-observability</code>.</li>
 </ul>
 <p>Node.js and <code>uv</code> are the official builds, checksum-verified, under your home directory, with no root
@@ -366,7 +367,7 @@ updates it, with or without <code>--langfuse</code>.</p>
 <tr><th></th><th>Claude Code</th><th>Codex</th></tr>
 </thead>
 <tbody>
-<tr><td>Plugin</td><td><code>langfuse-observability@purisev</code>: <a href="https://github.com/langfuse/Claude-Observability-Plugin">Langfuse’s Claude Code plugin</a> v1.2.2</td><td><code>tracing@purisev</code>: <a href="https://github.com/langfuse/codex-observability-plugin">Langfuse’s Codex plugin</a> 0.4.3, from npm</td></tr>
+<tr><td>Plugin</td><td><code>langfuse-observability@purisev</code>: <a href="https://github.com/langfuse/Claude-Observability-Plugin">Langfuse’s Claude Code plugin</a> v1.2.2</td><td><code>tracing@purisev</code>: <a href="https://github.com/langfuse/codex-observability-plugin">Langfuse’s Codex plugin</a> 0.4.3, from npm, which Codex fetches with <code>npm pack</code>; without npm the installer skips it</td></tr>
 <tr><td>Keys</td><td>the plugin’s options; the secret key in the system keychain, or in <code>~/.claude/.credentials.json</code> where there is none</td><td><code>~/.codex/langfuse.json</code>, readable by you only</td></tr>
 <tr><td>Hook</td><td><code>Stop</code> and <code>SessionEnd</code>, run with <code>uv</code>, which the installer offers when it is missing</td><td><code>Stop</code>, run with Node.js 22 or newer, which the installer offers in the same way</td></tr>
 </tbody>
