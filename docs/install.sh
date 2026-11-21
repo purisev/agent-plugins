@@ -18,6 +18,9 @@ LANGFUSE_PLUGIN="langfuse-observability"
 MIN_NODE_MAJOR=18
 NODE_LINE="v22"
 NODE_DIST="https://nodejs.org/dist/latest-${NODE_LINE}.x"
+# Codex runs the Langfuse hook on this Node.js; the other hooks need MIN_NODE_MAJOR.
+LANGFUSE_CODEX_NODE_MAJOR=22
+UV_DIST="https://github.com/astral-sh/uv/releases/latest/download"
 
 ASSUME_YES=0
 DRY_RUN=0
@@ -129,7 +132,7 @@ node_is_usable() {
   have node || return 1
   major=$(node_major)
   case "$major" in ''|*[!0-9]*) return 1 ;; esac
-  [ "$major" -ge "$MIN_NODE_MAJOR" ]
+  [ "$major" -ge "${1:-$MIN_NODE_MAJOR}" ]
 }
 
 node_platform() {
@@ -157,9 +160,6 @@ sha256_of() {
 # package manager, so it cannot disturb a system Node.js.
 install_node() {
   platform=$(node_platform) || die "no official Node.js build is known for $(uname -s) $(uname -m); install Node.js $MIN_NODE_MAJOR or newer yourself"
-  have curl || die "curl is needed to download Node.js"
-  have tar || die "tar is needed to unpack Node.js"
-
   if [ "$DRY_RUN" -eq 1 ]; then
     say "  would download the latest Node.js $NODE_LINE for $platform from $NODE_DIST"
     say "  would verify it against SHASUMS256.txt and unpack it under $HOME/.local/lib/nodejs"
@@ -190,32 +190,172 @@ install_node() {
 
 path_has_local_bin() { case ":$PATH:" in *":$HOME/.local/bin:"*) return 0 ;; *) return 1 ;; esac; }
 
-check_tools() {
-  step "Checking tools"
-  have git || die "git is not on PATH; the hosts clone plugins with it"
-  say "  git: $(git --version)"
+selected() { case " $PLUGINS " in *" $1 "*) return 0 ;; *) return 1 ;; esac; }
+on_host() { case " $HOSTS " in *" $1 "*) return 0 ;; *) return 1 ;; esac; }
 
-  local_bin_was_on_path=1
-  path_has_local_bin || local_bin_was_on_path=0
+# On macOS /usr/bin/git exists before the developer tools do, and fails when run.
+git_works() { have git && git --version >/dev/null 2>&1; }
 
-  if node_is_usable; then
-    say "  node: $(node --version)"
-  else
-    if have node; then say "  node: $(node --version) is older than $MIN_NODE_MAJOR"; else say "  node: not found"; fi
-    say "  openviking-memory and ponytail run their hooks with the bare node command."
-    if confirm "Install the official Node.js $NODE_LINE build under ~/.local (no root needed)?"; then
-      install_node
-      if [ "$local_bin_was_on_path" -eq 0 ]; then
-        warn "$HOME/.local/bin is not on your PATH. Add it to your shell profile, or the hosts will not find node."
-      fi
+package_manager() {
+  for pm in apt-get dnf yum zypper pacman apk brew; do
+    if have "$pm"; then printf '%s' "$pm"; return 0; fi
+  done
+  return 1
+}
+
+as_root() {
+  if [ "$(id -u)" -eq 0 ]; then run "$@"; else run sudo "$@"; fi
+}
+
+# Installs system packages, asking first. Returns 1 when they cannot be installed or the answer is no.
+install_packages() {
+  if ! pm=$(package_manager); then
+    if [ "$(uname -s)" = Darwin ]; then
+      warn "$1: not installed. Run xcode-select --install, which brings git with the developer tools, or install Homebrew"
     else
-      warn "continuing without a usable node; openviking-memory stays inactive until Node.js $MIN_NODE_MAJOR or newer is on PATH, and ponytail's hooks fail"
+      warn "$1: not installed, and no supported package manager (apt-get, dnf, yum, zypper, pacman, apk) was found"
     fi
+    return 1
+  fi
+  how="with $pm"
+  if [ "$pm" != brew ] && [ "$(id -u)" -ne 0 ]; then
+    if ! have sudo; then
+      warn "$1: installing with $pm needs root, and sudo is not available"
+      return 1
+    fi
+    how="with sudo $pm"
+  fi
+  confirm "Install $1 $how?" || return 1
+  # shellcheck disable=SC2086 # $1 is a list of package names
+  case "$pm" in
+    apt-get)
+      if [ -z "${APT_UPDATED:-}" ]; then as_root apt-get update -qq && APT_UPDATED=1; fi
+      as_root apt-get install -y -qq $1 ;;
+    dnf|yum) as_root "$pm" install -y $1 ;;
+    zypper) as_root zypper --non-interactive install $1 ;;
+    pacman) as_root pacman -S --noconfirm --needed $1 ;;
+    apk) as_root apk add $1 ;;
+    brew) run brew install $1 ;;
+  esac
+}
+
+# curl and tar fetch and unpack the Node.js and uv builds.
+download_tools_ready() {
+  missing=""
+  have curl || missing="curl"
+  have tar || missing="${missing:+$missing }tar"
+  [ -n "$missing" ] || return 0
+  say "  $missing: not found; needed to download it"
+  install_packages "$missing" || return 1
+  [ "$DRY_RUN" -eq 1 ] || { have curl && have tar; }
+}
+
+uv_target() {
+  case "$(uname -s)" in
+    Linux) os=unknown-linux-musl ;;
+    Darwin) os=apple-darwin ;;
+    *) return 1 ;;
+  esac
+  case "$(uname -m)" in
+    x86_64|amd64) arch=x86_64 ;;
+    aarch64|arm64) arch=aarch64 ;;
+    *) return 1 ;;
+  esac
+  printf '%s-%s' "$arch" "$os"
+}
+
+# The official build, checksum-verified, into ~/.local/bin, where uv's own installer puts it.
+install_uv() {
+  target=$(uv_target) || die "no official uv build is known for $(uname -s) $(uname -m); install uv yourself"
+  archive="uv-$target.tar.gz"
+  if [ "$DRY_RUN" -eq 1 ]; then
+    say "  would download $UV_DIST/$archive"
+    say "  would verify it against $archive.sha256 and put uv and uvx into $HOME/.local/bin"
+    return 0
   fi
 
-  if have uv; then say "  uv: $(uv --version)"
-  elif have python3; then say "  python3: $(python3 --version) (ov-wiki's optional offline helpers also need PyYAML; uv resolves it by itself)"
-  else say "  neither uv nor python3: ov-wiki works without its optional offline helpers"
+  work=$(mktemp -d)
+  say "  downloading $UV_DIST/$archive"
+  curl -fsSL "$UV_DIST/$archive" -o "$work/$archive"
+  curl -fsSL "$UV_DIST/$archive.sha256" -o "$work/$archive.sha256"
+  expected=$(cut -d' ' -f1 <"$work/$archive.sha256")
+  actual=$(sha256_of "$work/$archive") || die "neither sha256sum nor shasum is available to verify the download"
+  [ "$expected" = "$actual" ] || die "checksum mismatch for $archive; nothing was installed"
+
+  tar -xzf "$work/$archive" -C "$work"
+  mkdir -p "$HOME/.local/bin"
+  for tool in uv uvx; do cp "$work/uv-$target/$tool" "$HOME/.local/bin/$tool" && chmod 755 "$HOME/.local/bin/$tool"; done
+  rm -rf "$work"
+  PATH="$HOME/.local/bin:$PATH"
+  export PATH
+  say "  installed $("$HOME/.local/bin/uv" --version) into $HOME/.local/bin"
+}
+
+installed_into_local_bin() { LOCAL_BIN_TOOLS="${LOCAL_BIN_TOOLS:+$LOCAL_BIN_TOOLS and }$1"; }
+
+check_git() {
+  if git_works; then
+    say "  git: $(git --version)"
+    return 0
+  fi
+  say "  git: not found; the hosts clone plugins with it"
+  install_packages git || die "git is needed; install it, then run this installer again"
+  if [ "$DRY_RUN" -eq 1 ]; then return 0; fi
+  git_works || die "git is still not on PATH after installing it; open a new terminal and run this installer again"
+  say "  git: $(git --version)"
+}
+
+check_node() {
+  need=$MIN_NODE_MAJOR
+  if selected "$LANGFUSE_PLUGIN" && on_host codex; then need=$LANGFUSE_CODEX_NODE_MAJOR; fi
+  if node_is_usable "$need"; then
+    say "  node: $(node --version)"
+    return 0
+  fi
+  if have node; then say "  node: $(node --version) is older than $need"; else say "  node: not found"; fi
+  if [ "$need" -gt "$MIN_NODE_MAJOR" ]; then
+    say "  Codex runs the Langfuse hook on Node.js $need or newer."
+    without="Codex sends no traces to Langfuse until Node.js $need or newer is on PATH"
+  else
+    say "  openviking-memory and ponytail run their hooks with the bare node command."
+    without="openviking-memory stays inactive until Node.js $MIN_NODE_MAJOR or newer is on PATH, and ponytail's hooks fail"
+  fi
+  if confirm "Install the official Node.js $NODE_LINE build under ~/.local (no root needed)?" && download_tools_ready; then
+    install_node
+    installed_into_local_bin node
+  else
+    warn "continuing without a usable node; $without"
+  fi
+}
+
+check_uv() {
+  if have uv; then
+    say "  uv: $(uv --version)"
+  elif selected "$LANGFUSE_PLUGIN" && on_host claude; then
+    say "  uv: not found; Claude Code runs the Langfuse hook with it"
+    if confirm "Install the official uv build into ~/.local/bin (no root needed)?" && download_tools_ready; then
+      install_uv
+      installed_into_local_bin uv
+    else
+      warn "continuing without uv; Claude Code sends no traces to Langfuse until uv is on PATH"
+    fi
+  elif have python3; then
+    say "  python3: $(python3 --version) (ov-wiki's optional offline helpers also need PyYAML; uv resolves it by itself)"
+  else
+    say "  neither uv nor python3: ov-wiki works without its optional offline helpers"
+  fi
+}
+
+# Runs once the hosts and plugins are known, so it installs what they need and nothing else.
+check_tools() {
+  step "Checking tools"
+  local_bin_was_on_path=1
+  path_has_local_bin || local_bin_was_on_path=0
+  check_git
+  check_node
+  check_uv
+  if [ -n "${LOCAL_BIN_TOOLS:-}" ] && [ "$local_bin_was_on_path" -eq 0 ] && [ "$DRY_RUN" -eq 0 ]; then
+    warn "$HOME/.local/bin is not on your PATH, so the hosts will not find $LOCAL_BIN_TOOLS. Add this line to your shell profile: export PATH=\"\$HOME/.local/bin:\$PATH\""
   fi
 }
 
@@ -519,24 +659,11 @@ fetch(`${url}/api/public/projects`, { headers: { Authorization: `Basic ${auth}` 
 JS
 }
 
-check_langfuse_tools() {
-  case " $HOSTS " in *" claude "*)
-    if ! have uv; then
-      if have python3; then
-        warn "Claude Code runs the Langfuse hook with uv. Without it the hook needs Python 3.10 or newer with the langfuse package: pip install 'langfuse>=4.7,<5'"
-      else
-        warn "Claude Code runs the Langfuse hook with uv or python3, and neither is on PATH; no traces are sent until one is"
-      fi
-    fi ;;
-  esac
-  case " $HOSTS " in *" codex "*)
-    major=$(node_major)
-    case "$major" in ''|*[!0-9]*) major=0 ;; esac
-    [ "$major" -ge 22 ] || warn "Codex runs the Langfuse hook with Node.js 22 or newer; no traces are sent from Codex until it is on PATH"
-    if codex features list 2>/dev/null | grep -q '^hooks[[:space:]].*[[:space:]]false$'; then
-      warn "hooks are off in Codex; set hooks = true under [features] in ~/.codex/config.toml"
-    fi ;;
-  esac
+check_codex_hooks() {
+  on_host codex || return 0
+  if codex features list 2>/dev/null | grep -q '^hooks[[:space:]].*[[:space:]]false$'; then
+    warn "hooks are off in Codex; set hooks = true under [features] in ~/.codex/config.toml"
+  fi
 }
 
 claude_has_langfuse_keys() {
@@ -565,7 +692,7 @@ save_langfuse_keys() {
 setup_langfuse() {
   case " $PLUGINS " in *" $LANGFUSE_PLUGIN "*) ;; *) return 0 ;; esac
   step "Langfuse"
-  check_langfuse_tools
+  check_codex_hooks
   [ "$CONFIGURE" -eq 1 ] || return 0
 
   codex_conf="${CODEX_HOME:-$HOME/.codex}/langfuse.json"
@@ -635,11 +762,11 @@ main() {
   STAMP=$(date +%Y%m%d-%H%M%S)
   if [ "$DRY_RUN" -eq 1 ]; then say "Dry run: nothing will be changed."; fi
 
-  check_tools
   detect_hosts
   if [ "$WANT_LANGFUSE" -eq 1 ] || { [ -z "$WANT_PLUGINS" ] && langfuse_installed; }; then
     case " $PLUGINS " in *" $LANGFUSE_PLUGIN "*) ;; *) PLUGINS="$PLUGINS $LANGFUSE_PLUGIN" ;; esac
   fi
+  check_tools
   for host in $HOSTS; do
     case "$host" in
       claude) install_into_claude ;;
