@@ -25,8 +25,7 @@ $ErrorActionPreference = 'Stop'
 $Marketplace = 'purisev'
 $MarketplaceRepo = 'purisev/agent-plugins'
 $AllPlugins = @('openviking-memory', 'ov-wiki', 'humanizer', 'ponytail', 'infra', 'playwright')
-# Installed only on request, or when a host already has them.
-$OptionalPlugins = @('langfuse-observability')
+# Installed only on request, or when a host already has it.
 $LangfusePlugin = 'langfuse-observability'
 $MinNodeMajor = 18
 $NodeLine = 'v22'

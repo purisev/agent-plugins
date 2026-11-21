@@ -464,7 +464,6 @@ test("install.sh and install.ps1 install the same plugins from the same marketpl
   assert.match(sh, new RegExp(`ALL_PLUGINS="${ALL_PLUGINS.join(" ")}"`));
   assert.match(sh, new RegExp(`OPTIONAL_PLUGINS="${OPTIONAL_PLUGINS.join(" ")}"`));
   assert.match(ps, new RegExp(`\\$AllPlugins = @\\(${quoted(ALL_PLUGINS)}\\)`));
-  assert.match(ps, new RegExp(`\\$OptionalPlugins = @\\(${quoted(OPTIONAL_PLUGINS)}\\)`));
   assert.match(ps, new RegExp(`\\[ValidateSet\\(${quoted([...ALL_PLUGINS, ...OPTIONAL_PLUGINS])}\\)\\]`));
   for (const script of [sh, ps]) {
     assert.ok(script.includes(`purisev/agent-plugins`));

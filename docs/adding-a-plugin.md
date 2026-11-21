@@ -20,7 +20,8 @@ installer and this site. Plugins from other authors follow [Third-party plugins]
    it automatically.
 4. Add the plugin to `ALL_PLUGINS` in `docs/install.sh` and to `$AllPlugins` and the `-Plugin`
    `ValidateSet` in `docs/install.ps1`, and give it a section in `docs/plugins.md`. A plugin installed
-   only on request goes to `OPTIONAL_PLUGINS` and `$OptionalPlugins` instead.
+   only on request goes to `OPTIONAL_PLUGINS` instead of `ALL_PLUGINS`, and in `install.ps1` only to the
+   `ValidateSet`.
 5. Run the checks and open a pull request.
 
 Do not give a plugin repository a `marketplace.json` of its own. The same plugin reachable through two
