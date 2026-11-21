@@ -30,6 +30,7 @@ codex plugin add openviking-memory@purisev
 | [`ponytail`](docs/plugins.md#ponytail) | Steers the agent towards the smallest change that solves the task. Third-party, pinned to v5.3.3. |
 | [`infra`](https://github.com/purisev/agent-skills/tree/main/infra) | Skills for Ansible, Helm, Terraform (preflight only), Terramate and MetricsQL. |
 | [`playwright`](docs/plugins.md#playwright) | Browser tests, automation and scraping with Playwright. Third-party, pinned to a commit. |
+| [`langfuse-observability`](docs/langfuse.md) | Sends every session to a [Langfuse](https://langfuse.com) server as traces. Langfuse's own plugins, pinned to releases; the installer adds them only with `--langfuse`. |
 
 ## This repository
 

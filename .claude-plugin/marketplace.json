@@ -122,6 +122,24 @@
         "testing",
         "scraping"
       ]
+    },
+    {
+      "name": "langfuse-observability",
+      "description": "Sends every session to a Langfuse server as traces: prompts, model calls, tool calls and token usage. The installer adds it only with --langfuse. Third-party: Langfuse's official plugin, pinned to a release.",
+      "source": {
+        "source": "url",
+        "url": "https://github.com/langfuse/Claude-Observability-Plugin.git",
+        "ref": "v1.2.2",
+        "sha": "b1619f994240ad49de4a97caa01d7d7853944fc0"
+      },
+      "homepage": "https://langfuse.com/integrations/developer-tools/claude-code",
+      "category": "monitoring",
+      "keywords": [
+        "langfuse",
+        "observability",
+        "tracing",
+        "telemetry"
+      ]
     }
   ]
 }

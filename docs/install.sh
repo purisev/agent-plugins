@@ -12,6 +12,9 @@ set -eu
 MARKETPLACE="purisev"
 MARKETPLACE_REPO="purisev/agent-plugins"
 ALL_PLUGINS="openviking-memory ov-wiki humanizer ponytail infra playwright"
+# Installed only on request, or when a host already has them.
+OPTIONAL_PLUGINS="langfuse-observability"
+LANGFUSE_PLUGIN="langfuse-observability"
 MIN_NODE_MAJOR=18
 NODE_LINE="v22"
 NODE_DIST="https://nodejs.org/dist/latest-${NODE_LINE}.x"
@@ -22,6 +25,7 @@ WANT_HOSTS=""
 WANT_PLUGINS=""
 CONFIGURE=1
 REMOVE_DUPLICATES=0
+WANT_LANGFUSE=0
 TAB=$(printf '\t')
 
 say() { printf '%s\n' "$*"; }
@@ -39,8 +43,15 @@ Usage: install.sh [options]
   --host <claude|codex>   Install into this host only. Repeatable.
                           Default: every supported host found on PATH.
   --plugin <name>         Install this plugin only. Repeatable.
-                          Default: every plugin in the catalog.
-  --no-config             Do not offer to create ~/.openviking/ovcli.conf.
+                          Default: every plugin in the catalog except
+                          langfuse-observability.
+  --langfuse              Also install langfuse-observability, which sends
+                          every session to your Langfuse server, and save its
+                          keys. They come from LANGFUSE_BASE_URL,
+                          LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY, or are
+                          asked for.
+  --no-config             Do not set up the connections to OpenViking and
+                          Langfuse.
   --remove-duplicates     Remove what the purisev plugins make redundant: the
                           same plugin installed from another marketplace, and
                           loose skills a purisev plugin now ships, which move to
@@ -58,6 +69,7 @@ parse_args() {
     case "$1" in
       --host) [ $# -ge 2 ] || die "--host needs a value"; WANT_HOSTS="$WANT_HOSTS $2"; shift ;;
       --plugin) [ $# -ge 2 ] || die "--plugin needs a value"; WANT_PLUGINS="$WANT_PLUGINS $2"; shift ;;
+      --langfuse) WANT_LANGFUSE=1 ;;
       --no-config) CONFIGURE=0 ;;
       --remove-duplicates) REMOVE_DUPLICATES=1 ;;
       -y|--yes) ASSUME_YES=1 ;;
@@ -71,7 +83,7 @@ parse_args() {
     case "$host" in claude|codex) ;; *) die "unknown host: $host (expected claude or codex)" ;; esac
   done
   for plugin in $WANT_PLUGINS; do
-    case " $ALL_PLUGINS " in *" $plugin "*) ;; *) die "unknown plugin: $plugin (expected one of: $ALL_PLUGINS)" ;; esac
+    case " $ALL_PLUGINS $OPTIONAL_PLUGINS " in *" $plugin "*) ;; *) die "unknown plugin: $plugin (expected one of: $ALL_PLUGINS $OPTIONAL_PLUGINS)" ;; esac
   done
 }
 
@@ -222,6 +234,24 @@ detect_hosts() {
   [ -n "$HOSTS" ] || die "neither claude nor codex is on PATH; install Claude Code or Codex first"
 }
 
+# Codex installs a plugin only under the name in its manifest, and Langfuse's Codex plugin is called tracing.
+codex_name() {
+  case "$1" in
+    "$LANGFUSE_PLUGIN") printf 'tracing' ;;
+    *) printf '%s' "$1" ;;
+  esac
+}
+
+langfuse_installed() {
+  case " $HOSTS " in *" claude "*)
+    case "$(claude plugin list --json 2>/dev/null || true)" in *"\"$LANGFUSE_PLUGIN@$MARKETPLACE\""*) return 0 ;; esac ;;
+  esac
+  case " $HOSTS " in *" codex "*)
+    case "$(codex plugin list --json 2>/dev/null || true)" in *"\"$(codex_name "$LANGFUSE_PLUGIN")@$MARKETPLACE\""*) return 0 ;; esac ;;
+  esac
+  return 1
+}
+
 install_into_claude() {
   step "Claude Code"
   if claude plugin marketplace list 2>/dev/null | grep -q "($MARKETPLACE_REPO)"; then
@@ -247,7 +277,7 @@ install_into_codex() {
     run codex plugin marketplace add "$MARKETPLACE_REPO"
   fi
   for plugin in $PLUGINS; do
-    run codex plugin add "$plugin@$MARKETPLACE"
+    run codex plugin add "$(codex_name "$plugin")@$MARKETPLACE"
   done
   CODEX_INSTALLED=1
 }
@@ -469,11 +499,131 @@ configure_connection() {
   say "  wrote $conf (mode 600)"
 }
 
+# The same text is in install.ps1; install.test.mjs keeps the two equal.
+langfuse_check_js() {
+  cat <<'JS'
+// Exits 0 when the Langfuse server accepts the key pair, 1 when it refuses it and 2 when it cannot
+// be reached. The keys come in the environment, so they never appear on a command line.
+const { LANGFUSE_BASE_URL: url, LANGFUSE_PUBLIC_KEY: publicKey, LANGFUSE_SECRET_KEY: secretKey } = process.env;
+const auth = Buffer.from(`${publicKey}:${secretKey}`).toString("base64");
+fetch(`${url}/api/public/projects`, { headers: { Authorization: `Basic ${auth}` }, signal: AbortSignal.timeout(15000) }).then(
+  (response) => {
+    console.log(`HTTP ${response.status}`);
+    process.exit(response.ok ? 0 : 1);
+  },
+  (error) => {
+    console.log(error.cause?.code ?? error.name);
+    process.exit(2);
+  },
+);
+JS
+}
+
+check_langfuse_tools() {
+  case " $HOSTS " in *" claude "*)
+    if ! have uv; then
+      if have python3; then
+        warn "Claude Code runs the Langfuse hook with uv. Without it the hook needs Python 3.10 or newer with the langfuse package: pip install 'langfuse>=4.7,<5'"
+      else
+        warn "Claude Code runs the Langfuse hook with uv or python3, and neither is on PATH; no traces are sent until one is"
+      fi
+    fi ;;
+  esac
+  case " $HOSTS " in *" codex "*)
+    major=$(node_major)
+    case "$major" in ''|*[!0-9]*) major=0 ;; esac
+    [ "$major" -ge 22 ] || warn "Codex runs the Langfuse hook with Node.js 22 or newer; no traces are sent from Codex until it is on PATH"
+    if codex features list 2>/dev/null | grep -q '^hooks[[:space:]].*[[:space:]]false$'; then
+      warn "hooks are off in Codex; set hooks = true under [features] in ~/.codex/config.toml"
+    fi ;;
+  esac
+}
+
+claude_has_langfuse_keys() {
+  claude plugin configure "$LANGFUSE_PLUGIN@$MARKETPLACE" --json 2>/dev/null | tr -d ' \t\r\n' | grep -q '"configured":\[[^]]*"LANGFUSE_SECRET_KEY"'
+}
+
+save_langfuse_keys() {
+  for host in $1; do
+    case "$host" in
+      claude)
+        values=$(printf '{"LANGFUSE_BASE_URL":"%s","LANGFUSE_PUBLIC_KEY":"%s","LANGFUSE_SECRET_KEY":"%s"}' \
+          "$(json_string "$url")" "$(json_string "$public_key")" "$(json_string "$secret_key")")
+        say "  claude plugin configure $LANGFUSE_PLUGIN@$MARKETPLACE --values-stdin"
+        printf '%s' "$values" | claude plugin configure "$LANGFUSE_PLUGIN@$MARKETPLACE" --values-stdin \
+          || warn "Claude Code did not save the Langfuse keys; run /plugin configure $LANGFUSE_PLUGIN@$MARKETPLACE in it" ;;
+      codex)
+        mkdir -p "$(dirname "$codex_conf")"
+        ( umask 077; printf '{\n  "enabled": true,\n  "base_url": "%s",\n  "public_key": "%s",\n  "secret_key": "%s"\n}\n' \
+          "$(json_string "$url")" "$(json_string "$public_key")" "$(json_string "$secret_key")" >"$codex_conf" )
+        chmod 600 "$codex_conf"
+        say "  wrote $codex_conf (mode 600)" ;;
+    esac
+  done
+}
+
+setup_langfuse() {
+  case " $PLUGINS " in *" $LANGFUSE_PLUGIN "*) ;; *) return 0 ;; esac
+  step "Langfuse"
+  check_langfuse_tools
+  [ "$CONFIGURE" -eq 1 ] || return 0
+
+  codex_conf="${CODEX_HOME:-$HOME/.codex}/langfuse.json"
+  needs=""
+  for host in $HOSTS; do
+    case "$host" in
+      claude)
+        if claude_has_langfuse_keys; then say "  Claude Code has the Langfuse keys; leaving them as they are"
+        else needs="$needs claude"
+        fi ;;
+      codex)
+        if [ -f "$codex_conf" ]; then say "  $codex_conf exists; leaving it as it is"
+        else needs="$needs codex"
+        fi ;;
+    esac
+  done
+  [ -n "$needs" ] || return 0
+
+  url="${LANGFUSE_BASE_URL:-}"
+  public_key="${LANGFUSE_PUBLIC_KEY:-}"
+  secret_key="${LANGFUSE_SECRET_KEY:-}"
+  if [ -z "$url" ] || [ -z "$public_key" ] || [ -z "$secret_key" ]; then
+    if ! can_ask; then
+      say "  No Langfuse keys saved. Set LANGFUSE_BASE_URL, LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY and run the installer again with --langfuse."
+      return 0
+    fi
+    [ -n "$url" ] || url=$(ask "  Langfuse server URL (for example https://langfuse.example.com)")
+    [ -n "$public_key" ] || public_key=$(ask "  Public key of the Langfuse project (pk-lf-...)")
+    [ -n "$secret_key" ] || secret_key=$(ask_secret "  Secret key (sk-lf-...; input is hidden)")
+    if [ -z "$url" ] || [ -z "$public_key" ] || [ -z "$secret_key" ]; then
+      warn "the URL and both keys are needed; no Langfuse keys saved"
+      return 0
+    fi
+  fi
+  url=${url%/}
+
+  if [ "$DRY_RUN" -eq 1 ]; then
+    say "  would check the keys against $url and save them for:$needs"
+    return 0
+  fi
+  if node_is_usable; then
+    if verdict=$(LANGFUSE_BASE_URL="$url" LANGFUSE_PUBLIC_KEY="$public_key" LANGFUSE_SECRET_KEY="$secret_key" node -e "$(langfuse_check_js)"); then
+      say "  $url accepts the keys"
+    else
+      warn "$url did not accept the keys ($verdict); no Langfuse keys saved"
+      return 0
+    fi
+  else
+    warn "the keys cannot be checked without node; saving them unchecked"
+  fi
+  save_langfuse_keys "$needs"
+}
+
 finish() {
   step "Done"
   say "  Restart the hosts so they load the plugins."
   if [ "${CODEX_INSTALLED:-0}" -eq 1 ]; then
-    say "  Codex: run /hooks once and approve the hooks openviking-memory and ponytail bring."
+    say "  Codex: run /hooks once and approve the hooks the plugins bring."
   fi
   say "  Check the setup with the ov-memory-doctor skill; it names anything still missing."
   say "  Documentation: https://ai-plugins.purisev.com"
@@ -487,6 +637,9 @@ main() {
 
   check_tools
   detect_hosts
+  if [ "$WANT_LANGFUSE" -eq 1 ] || { [ -z "$WANT_PLUGINS" ] && langfuse_installed; }; then
+    case " $PLUGINS " in *" $LANGFUSE_PLUGIN "*) ;; *) PLUGINS="$PLUGINS $LANGFUSE_PLUGIN" ;; esac
+  fi
   for host in $HOSTS; do
     case "$host" in
       claude) install_into_claude ;;
@@ -495,6 +648,7 @@ main() {
     handle_duplicates "$host"
   done
   configure_connection
+  setup_langfuse
   finish
 }
 

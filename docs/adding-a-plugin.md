@@ -19,7 +19,8 @@ installer and this site. Plugins from other authors follow [Third-party plugins]
    `.claude-plugin/plugin.json`. A bare name resolves inside this marketplace, so Claude Code installs
    it automatically.
 4. Add the plugin to `ALL_PLUGINS` in `docs/install.sh` and to `$AllPlugins` and the `-Plugin`
-   `ValidateSet` in `docs/install.ps1`, and give it a section in `docs/plugins.md`.
+   `ValidateSet` in `docs/install.ps1`, and give it a section in `docs/plugins.md`. A plugin installed
+   only on request goes to `OPTIONAL_PLUGINS` and `$OptionalPlugins` instead.
 5. Run the checks and open a pull request.
 
 Do not give a plugin repository a `marketplace.json` of its own. The same plugin reachable through two
@@ -39,7 +40,9 @@ never follows someone else's branch:
 - **Codex**: the same repository, `ref` and `sha`, when the source has a manifest Codex reads and its
   skills under `skills/`. Otherwise Codex installs the plugin empty, without an error. Such a plugin
   gets a Codex-only copy in purisev/agent-skills, whose README describes the layout, and joins
-  `CODEX_WRAPPERS` in `marketplace.test.mjs`.
+  `CODEX_WRAPPERS` in `marketplace.test.mjs`. A plugin its author publishes for Codex on npm is
+  listed with an `npm` source and an exact `version`; when its manifest gives another name, the Codex
+  entry takes that name, and `CODEX_NAMES` in `marketplace.test.mjs` pairs it with the Claude Code one.
 
 An install that succeeds does not prove that Codex found the skills. `codex debug prompt-input hi`
 prints the prompt Codex would send, and its skills section lists every skill it loaded.

@@ -34,6 +34,12 @@ const CODEX_PATHS = { "openviking-memory": "examples/codex-memory-plugin" };
 // neither, so Codex installs a copy kept in purisev/agent-skills, which checks it against the commit
 // pinned here.
 const CODEX_WRAPPERS = ["humanizer", "playwright"];
+// Codex installs a plugin only under the name in its manifest. Langfuse publishes its Codex plugin
+// separately, as an npm package named tracing.
+const CODEX_NAMES = { "langfuse-observability": "tracing" };
+const CODEX_NPM = { tracing: "@langfuse/codex-observability-plugin" };
+const EXACT_VERSION = /^\d+\.\d+\.\d+$/;
+const codexName = (name) => CODEX_NAMES[name] ?? name;
 
 // Claude Code clones a `github` source over SSH and does not fall back to HTTPS, so it fails on a
 // machine without an SSH key for GitHub. An https clone URL works everywhere.
@@ -71,13 +77,17 @@ test("the README lists every plugin", () => {
 
 test("the Codex catalog publishes the same plugins under the same marketplace name", () => {
   assert.equal(codexCatalog.name, marketplace.name);
-  assert.deepEqual(codexCatalog.plugins.map((p) => p.name).sort(), marketplace.plugins.map((p) => p.name).sort());
+  assert.deepEqual(codexCatalog.plugins.map((p) => p.name).sort(), marketplace.plugins.map((p) => codexName(p.name)).sort());
 });
 
 test("every Codex entry installs what its Claude Code entry names", () => {
   for (const plugin of codexCatalog.plugins) {
-    const claude = marketplace.plugins.find((p) => p.name === plugin.name).source;
-    if (CODEX_WRAPPERS.includes(plugin.name)) {
+    const claude = marketplace.plugins.find((p) => codexName(p.name) === plugin.name).source;
+    if (CODEX_NPM[plugin.name]) {
+      assert.equal(plugin.source.source, "npm", plugin.name);
+      assert.equal(plugin.source.package, CODEX_NPM[plugin.name], plugin.name);
+      assert.match(plugin.source.version ?? "", EXACT_VERSION, `${plugin.name} must be pinned to a release`);
+    } else if (CODEX_WRAPPERS.includes(plugin.name)) {
       assert.deepEqual(plugin.source, { source: "git-subdir", url: AGENT_SKILLS, path: plugin.name, ref: "main" });
     } else {
       assert.deepEqual(plugin.source, {

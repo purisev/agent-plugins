@@ -10,8 +10,9 @@
 param(
   [ValidateSet('claude', 'codex')]
   [string[]]$AgentHost = @(),
-  [ValidateSet('openviking-memory', 'ov-wiki', 'humanizer', 'ponytail', 'infra', 'playwright')]
+  [ValidateSet('openviking-memory', 'ov-wiki', 'humanizer', 'ponytail', 'infra', 'playwright', 'langfuse-observability')]
   [string[]]$Plugin = @(),
+  [switch]$Langfuse,
   [switch]$NoConfig,
   [switch]$RemoveDuplicates,
   [switch]$Yes,
@@ -24,6 +25,9 @@ $ErrorActionPreference = 'Stop'
 $Marketplace = 'purisev'
 $MarketplaceRepo = 'purisev/agent-plugins'
 $AllPlugins = @('openviking-memory', 'ov-wiki', 'humanizer', 'ponytail', 'infra', 'playwright')
+# Installed only on request, or when a host already has them.
+$OptionalPlugins = @('langfuse-observability')
+$LangfusePlugin = 'langfuse-observability'
 $MinNodeMajor = 18
 $NodeLine = 'v22'
 $NodeDist = "https://nodejs.org/dist/latest-$NodeLine.x"
@@ -141,6 +145,24 @@ function Get-AgentHost {
   return $found
 }
 
+# Codex installs a plugin only under the name in its manifest, and Langfuse's Codex plugin is called tracing.
+function Get-CodexName([string]$Name) {
+  if ($Name -eq $LangfusePlugin) { return 'tracing' }
+  return $Name
+}
+
+function Test-LangfuseInstalled([string[]]$Hosts) {
+  if ($Hosts -contains 'claude') {
+    $installed = (& claude plugin list --json 2>$null) -join "`n"
+    if ($installed -like "*`"$LangfusePlugin@$Marketplace`"*") { return $true }
+  }
+  if ($Hosts -contains 'codex') {
+    $installed = (& codex plugin list --json 2>$null) -join "`n"
+    if ($installed -like "*`"$(Get-CodexName $LangfusePlugin)@$Marketplace`"*") { return $true }
+  }
+  return $false
+}
+
 function Install-IntoClaude([string[]]$Plugins) {
   Step 'Claude Code'
   $marketplaces = (& claude plugin marketplace list 2>$null) -join "`n"
@@ -160,7 +182,7 @@ function Install-IntoCodex([string[]]$Plugins) {
   $marketplaces = @(& codex plugin marketplace list 2>$null)
   if ($marketplaces | Where-Object { $_ -match "^$Marketplace\s" }) { Invoke-Tool codex plugin marketplace upgrade $Marketplace }
   else { Invoke-Tool codex plugin marketplace add $MarketplaceRepo }
-  foreach ($name in $Plugins) { Invoke-Tool codex plugin add "$name@$Marketplace" }
+  foreach ($name in $Plugins) { Invoke-Tool codex plugin add "$(Get-CodexName $name)@$Marketplace" }
   $script:CodexInstalled = $true
 }
 
@@ -360,13 +382,132 @@ function Initialize-Connection([string[]]$Plugins) {
   $key = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure))
   if ($DryRun) { Say "  would write $conf, readable by you only"; return }
 
-  New-Item -ItemType Directory -Path (Split-Path $conf) -Force | Out-Null
-  # No byte-order mark: the plugins parse this file with JSON.parse, which rejects one.
   $json = [ordered]@{ url = $url; api_key = $key } | ConvertTo-Json
-  [IO.File]::WriteAllText($conf, "$json`n", (New-Object Text.UTF8Encoding $false))
-  if (OnWindows) { & icacls $conf /inheritance:r /grant:r "$($env:USERNAME):F" | Out-Null }
-  else { & chmod 600 $conf }
+  Write-PrivateFile $conf "$json`n"
   Say "  wrote $conf, readable by you only"
+}
+
+# The same text is in install.sh; install.test.mjs keeps the two equal.
+function Get-LangfuseCheck {
+  return @'
+// Exits 0 when the Langfuse server accepts the key pair, 1 when it refuses it and 2 when it cannot
+// be reached. The keys come in the environment, so they never appear on a command line.
+const { LANGFUSE_BASE_URL: url, LANGFUSE_PUBLIC_KEY: publicKey, LANGFUSE_SECRET_KEY: secretKey } = process.env;
+const auth = Buffer.from(`${publicKey}:${secretKey}`).toString("base64");
+fetch(`${url}/api/public/projects`, { headers: { Authorization: `Basic ${auth}` }, signal: AbortSignal.timeout(15000) }).then(
+  (response) => {
+    console.log(`HTTP ${response.status}`);
+    process.exit(response.ok ? 0 : 1);
+  },
+  (error) => {
+    console.log(error.cause?.code ?? error.name);
+    process.exit(2);
+  },
+);
+'@
+}
+
+function Test-LangfuseToolchain([string[]]$Hosts) {
+  if (($Hosts -contains 'claude') -and -not (Have 'uv')) {
+    if ((Have 'python3') -or (Have 'python')) {
+      Warn "Claude Code runs the Langfuse hook with uv. Without it the hook needs Python 3.10 or newer as python3 with the langfuse package: pip install 'langfuse>=4.7,<5'"
+    } else {
+      Warn 'Claude Code runs the Langfuse hook with uv or python3, and neither is on PATH; no traces are sent until one is'
+    }
+  }
+  if ($Hosts -contains 'codex') {
+    if ((Get-NodeMajor) -lt 22) { Warn 'Codex runs the Langfuse hook with Node.js 22 or newer; no traces are sent from Codex until it is on PATH' }
+    $features = @(& codex features list 2>$null)
+    if ($features | Where-Object { $_ -match '^hooks\s.*\sfalse$' }) {
+      Warn 'hooks are off in Codex; set hooks = true under [features] in ~/.codex/config.toml'
+    }
+  }
+}
+
+function Test-ClaudeLangfuseKey {
+  $json = ((& claude plugin configure "$LangfusePlugin@$Marketplace" --json 2>$null) -join '') -replace '\s', ''
+  return $json -match '"configured":\[[^\]]*"LANGFUSE_SECRET_KEY"'
+}
+
+function Write-PrivateFile([string]$Path, [string]$Text) {
+  New-Item -ItemType Directory -Path (Split-Path $Path) -Force | Out-Null
+  # No byte-order mark: the plugins parse these files with JSON.parse, which rejects one.
+  [IO.File]::WriteAllText($Path, $Text, (New-Object Text.UTF8Encoding $false))
+  if (OnWindows) { & icacls $Path /inheritance:r /grant:r "$($env:USERNAME):F" | Out-Null }
+  else { & chmod 600 $Path }
+}
+
+function Initialize-Langfuse([string[]]$Plugins, [string[]]$Hosts) {
+  if ($Plugins -notcontains $LangfusePlugin) { return }
+  Step 'Langfuse'
+  Test-LangfuseToolchain $Hosts
+  if ($NoConfig) { return }
+
+  $codexHome = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $HOME '.codex' }
+  $codexConf = Join-Path $codexHome 'langfuse.json'
+  $needs = @()
+  foreach ($name in $Hosts) {
+    if ($name -eq 'claude') {
+      if (Test-ClaudeLangfuseKey) { Say '  Claude Code has the Langfuse keys; leaving them as they are' } else { $needs += 'claude' }
+    } elseif (Test-Path $codexConf) {
+      Say "  $codexConf exists; leaving it as it is"
+    } else {
+      $needs += 'codex'
+    }
+  }
+  if ($needs.Count -eq 0) { return }
+
+  $url = $env:LANGFUSE_BASE_URL
+  $publicKey = $env:LANGFUSE_PUBLIC_KEY
+  $secretKey = $env:LANGFUSE_SECRET_KEY
+  if (-not ($url -and $publicKey -and $secretKey)) {
+    if (-not (CanAsk)) {
+      Say '  No Langfuse keys saved. Set LANGFUSE_BASE_URL, LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY and run the installer again with -Langfuse.'
+      return
+    }
+    if (-not $url) { $url = Read-Host '  Langfuse server URL (for example https://langfuse.example.com)' }
+    if (-not $publicKey) { $publicKey = Read-Host '  Public key of the Langfuse project (pk-lf-...)' }
+    if (-not $secretKey) {
+      $secure = Read-Host '  Secret key (sk-lf-...; input is hidden)' -AsSecureString
+      $secretKey = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure))
+    }
+    if (-not ($url -and $publicKey -and $secretKey)) { Warn 'the URL and both keys are needed; no Langfuse keys saved'; return }
+  }
+  $url = $url.TrimEnd('/')
+
+  if ($DryRun) { Say "  would check the keys against $url and save them for: $($needs -join ' ')"; return }
+  if ((Get-NodeMajor) -ge $MinNodeMajor) {
+    $saved = @{ url = $env:LANGFUSE_BASE_URL; publicKey = $env:LANGFUSE_PUBLIC_KEY; secretKey = $env:LANGFUSE_SECRET_KEY }
+    $env:LANGFUSE_BASE_URL = $url
+    $env:LANGFUSE_PUBLIC_KEY = $publicKey
+    $env:LANGFUSE_SECRET_KEY = $secretKey
+    # A file, not node -e: Windows PowerShell mangles the quotes in a native command's arguments.
+    $js = Join-Path ([IO.Path]::GetTempPath()) "purisev-langfuse-$PID.js"
+    [IO.File]::WriteAllText($js, (Get-LangfuseCheck), (New-Object Text.UTF8Encoding $false))
+    try { $verdict = (& node $js) -join ' '; $accepted = $LASTEXITCODE -eq 0 }
+    finally {
+      Remove-Item -LiteralPath $js -ErrorAction SilentlyContinue
+      $env:LANGFUSE_BASE_URL = $saved.url
+      $env:LANGFUSE_PUBLIC_KEY = $saved.publicKey
+      $env:LANGFUSE_SECRET_KEY = $saved.secretKey
+    }
+    if (-not $accepted) { Warn "$url did not accept the keys ($verdict); no Langfuse keys saved"; return }
+    Say "  $url accepts the keys"
+  } else {
+    Warn 'the keys cannot be checked without node; saving them unchecked'
+  }
+
+  if ($needs -contains 'claude') {
+    $values = [ordered]@{ LANGFUSE_BASE_URL = $url; LANGFUSE_PUBLIC_KEY = $publicKey; LANGFUSE_SECRET_KEY = $secretKey } | ConvertTo-Json -Compress
+    Say "  claude plugin configure $LangfusePlugin@$Marketplace --values-stdin"
+    $values | & claude plugin configure "$LangfusePlugin@$Marketplace" --values-stdin
+    if ($LASTEXITCODE -ne 0) { Warn "Claude Code did not save the Langfuse keys; run /plugin configure $LangfusePlugin@$Marketplace in it" }
+  }
+  if ($needs -contains 'codex') {
+    $json = [ordered]@{ enabled = $true; base_url = $url; public_key = $publicKey; secret_key = $secretKey } | ConvertTo-Json
+    Write-PrivateFile $codexConf "$json`n"
+    Say "  wrote $codexConf, readable by you only"
+  }
 }
 
 function Main {
@@ -375,15 +516,20 @@ function Main {
   $script:Stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
 
   Test-Toolchain
-  foreach ($name in (Get-AgentHost)) {
+  $hosts = @(Get-AgentHost)
+  if ($Langfuse -or (($Plugin.Count -eq 0) -and (Test-LangfuseInstalled $hosts))) {
+    if ($plugins -notcontains $LangfusePlugin) { $plugins = @($plugins) + $LangfusePlugin }
+  }
+  foreach ($name in $hosts) {
     if ($name -eq 'claude') { Install-IntoClaude $plugins } else { Install-IntoCodex $plugins }
     Resolve-Duplicate $name
   }
   Initialize-Connection $plugins
+  Initialize-Langfuse $plugins $hosts
 
   Step 'Done'
   Say '  Restart the hosts so they load the plugins.'
-  if ($script:CodexInstalled) { Say '  Codex: run /hooks once and approve the hooks openviking-memory and ponytail bring.' }
+  if ($script:CodexInstalled) { Say '  Codex: run /hooks once and approve the hooks the plugins bring.' }
   Say '  Check the setup with the ov-memory-doctor skill; it names anything still missing.'
   Say '  Documentation: https://ai-plugins.purisev.com'
 }

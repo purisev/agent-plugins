@@ -87,6 +87,19 @@
         "authentication": "ON_USE"
       },
       "category": "Productivity"
+    },
+    {
+      "name": "tracing",
+      "source": {
+        "source": "npm",
+        "package": "@langfuse/codex-observability-plugin",
+        "version": "0.4.3"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_USE"
+      },
+      "category": "Productivity"
     }
   ]
 }
