@@ -47,7 +47,8 @@ The installer:
 3. adds the `purisev` marketplace to each host, and installs or updates the plugins.
    `langfuse-observability` is installed only with `--langfuse`, and then kept up to date;
 4. offers to create `~/.openviking/ovcli.conf` when there is none, and leaves an existing one alone;
-5. with `--langfuse`, saves the Langfuse keys for each host; see [Send traces to Langfuse](langfuse.md).
+5. with `--langfuse`, saves the Langfuse keys for each host, and gives the Claude Code hook time to
+   send the last turn at exit; see [Send traces to Langfuse](langfuse.md).
 
 It is safe to run again: a second run updates what is there.
 

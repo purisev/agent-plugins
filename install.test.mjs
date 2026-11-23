@@ -140,10 +140,11 @@ function systemPath() {
 
 function environment(box, extra = {}) {
   const env = { ...process.env, PATH: box.path.join(delimiter), HOME: box.home, USERPROFILE: box.home, ...extra };
-  for (const name of ["OPENVIKING_URL", "OPENVIKING_BASE_URL", "OPENVIKING_CLI_CONFIG_FILE", "CLAUDE_CONFIG_DIR", "CODEX_HOME", "LANGFUSE_BASE_URL", "LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY"]) if (!(name in extra)) delete env[name];
+  for (const name of ["OPENVIKING_URL", "OPENVIKING_BASE_URL", "OPENVIKING_CLI_CONFIG_FILE", "CLAUDE_CONFIG_DIR", "CODEX_HOME", "LANGFUSE_BASE_URL", "LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY", "CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS"]) if (!(name in extra)) delete env[name];
   return env;
 }
 
+const SESSIONEND = "CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS";
 const LANGFUSE_KEYS = { LANGFUSE_PUBLIC_KEY: "pk-lf-test", LANGFUSE_SECRET_KEY: "sk-lf-test" };
 
 // A Langfuse server that accepts only LANGFUSE_KEYS. spawnSync blocks this thread, so it answers
@@ -505,6 +506,57 @@ for (const installer of installers) {
     assert.equal(readFileSync(conf, "utf-8"), '{"enabled":true}');
   });
 
+  it("Claude Code gets time at exit for the Langfuse hook, and the rest of its settings stay", () => {
+    const box = sandbox({ hosts: ["claude"] });
+    const settings = join(box.home, ".claude", "settings.json");
+    writeFile(settings, JSON.stringify({ model: "opus", env: { KEPT: "1" } }));
+    const result = installer.run(box, ["yes", "langfuse"]);
+    assert.equal(result.status, 0, result.stderr + result.stdout);
+    assert.deepEqual(JSON.parse(readFileSync(settings, "utf-8")), { model: "opus", env: { KEPT: "1", [SESSIONEND]: "15000" } });
+    assert.match(result.stdout, /set CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS to 15000 in /);
+  });
+
+  it("Claude Code's settings file is created for the Langfuse hook's time at exit", () => {
+    const box = sandbox({ hosts: ["claude"] });
+    const result = installer.run(box, ["yes", "langfuse"]);
+    assert.equal(result.status, 0, result.stderr + result.stdout);
+    const settings = join(box.home, ".claude", "settings.json");
+    assert.deepEqual(JSON.parse(readFileSync(settings, "utf-8")), { env: { [SESSIONEND]: "15000" } });
+  });
+
+  it("a time at exit already in Claude Code's settings is kept", () => {
+    const box = sandbox({ hosts: ["claude"] });
+    const settings = join(box.home, ".claude", "settings.json");
+    writeFile(settings, JSON.stringify({ env: { [SESSIONEND]: "5000" } }));
+    const result = installer.run(box, ["yes", "langfuse"]);
+    assert.equal(result.status, 0, result.stderr + result.stdout);
+    assert.match(result.stdout, /sets CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS to 5000; leaving it as it is/);
+    assert.equal(readFileSync(settings, "utf-8"), JSON.stringify({ env: { [SESSIONEND]: "5000" } }));
+  });
+
+  it("Claude Code's settings are not edited without consent, in a dry run, or when they are not JSON", () => {
+    const box = sandbox({ hosts: ["claude"] });
+    const settings = join(box.home, ".claude", "settings.json");
+    const declined = installer.run(box, ["langfuse"]);
+    assert.equal(declined.status, 0, declined.stderr + declined.stdout);
+    assert.match(declined.stdout + declined.stderr, /not editing .*the last turn of each session never reaches Langfuse/);
+    const dryRun = installer.run(box, ["yes", "dryRun", "langfuse"]);
+    assert.match(dryRun.stdout, /would set CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS to 15000 in /);
+    assert.ok(!existsSync(settings));
+    writeFile(settings, "{ not json");
+    const broken = installer.run(box, ["yes", "langfuse"]);
+    assert.equal(broken.status, 0, broken.stderr + broken.stdout);
+    assert.match(broken.stdout + broken.stderr, /cannot be read as JSON/);
+    assert.equal(readFileSync(settings, "utf-8"), "{ not json");
+  });
+
+  it("without Langfuse, Claude Code's settings are left alone", () => {
+    const box = sandbox({ hosts: ["claude"] });
+    const result = installer.run(box, ["yes"]);
+    assert.equal(result.status, 0, result.stderr + result.stdout);
+    assert.ok(!existsSync(join(box.home, ".claude", "settings.json")));
+  });
+
   it("an existing connection file is left untouched", () => {
     const box = sandbox({ hosts: ["claude"] });
     mkdirSync(join(box.home, ".openviking"));
@@ -599,6 +651,13 @@ test("install.sh and install.ps1 check Langfuse keys with the same program", () 
   const read = (file) => readFileSync(file, "utf-8").replace(/\r\n/g, "\n");
   const sh = read(SH_SCRIPT).match(/^langfuse_check_js\(\) \{\n  cat <<'JS'\n([\s\S]*?)\nJS\n\}/m)[1];
   const ps = read(PS_SCRIPT).match(/^function Get-LangfuseCheck \{\n  return @'\n([\s\S]*?)\n'@\n\}/m)[1];
+  assert.equal(ps, sh);
+});
+
+test("install.sh and install.ps1 set Claude Code's time at exit with the same program", () => {
+  const read = (file) => readFileSync(file, "utf-8").replace(/\r\n/g, "\n");
+  const sh = read(SH_SCRIPT).match(/^sessionend_timeout_js\(\) \{\n  cat <<'JS'\n([\s\S]*?)\nJS\n\}/m)[1];
+  const ps = read(PS_SCRIPT).match(/^function Get-SessionEndTimeoutSetter \{\n  return @'\n([\s\S]*?)\n'@\n\}/m)[1];
   assert.equal(ps, sh);
 });
 

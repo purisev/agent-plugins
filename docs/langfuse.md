@@ -34,11 +34,21 @@ curl -fsSL https://ai-plugins.purisev.com/install.sh | sh -s -- --langfuse --yes
 Keys a host already has are left alone. Once the plugin is installed, every later run of the installer
 updates it, with or without `--langfuse`.
 
+At exit Claude Code gives `SessionEnd` hooks a second and a half, after which it stops them with
+`Hook cancelled`. The Claude Code plugin sends the last turn of a session from that hook, which takes
+longer, so the installer offers to set `CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS` to `15000` under `env`
+in `~/.claude/settings.json`. Claude Code then waits for the hook up to 15 seconds, and only as long as
+it runs. A value already there, in the file or in the environment, is left alone. To set it by hand:
+
+```json
+{ "env": { "CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS": "15000" } }
+```
+
 | | Claude Code | Codex |
 | --- | --- | --- |
 | Plugin | `langfuse-observability@purisev`: [Langfuse's Claude Code plugin](https://github.com/langfuse/Claude-Observability-Plugin) v1.2.2 | `tracing@purisev`: [Langfuse's Codex plugin](https://github.com/langfuse/codex-observability-plugin) 0.4.3, from npm, which Codex fetches with `npm pack`; without npm the installer skips it |
 | Keys | the plugin's options; the secret key in the system keychain, or in `~/.claude/.credentials.json` where there is none | `~/.codex/langfuse.json`, readable by you only |
-| Hook | `Stop` and `SessionEnd`, run with `uv`, which the installer offers when it is missing | `Stop`, run with Node.js 22 or newer, which the installer offers in the same way |
+| Hook | `Stop` and `SessionEnd`, run with `uv`, which the installer offers when it is missing; `SessionEnd` gets 15 seconds at exit, see above | `Stop`, run with Node.js 22 or newer, which the installer offers in the same way |
 
 Codex installs a plugin only under the name its manifest gives, so there it is `tracing`. Codex asks to
 approve its hook once (`/hooks`), and again after an update that changes it.
@@ -67,3 +77,8 @@ options.
 Finish one turn in each host and open Tracing in the Langfuse project. Nothing there after a turn: in
 Claude Code, set the debug option and read its log; in Codex, check that the hook is approved in
 `/hooks` and that `node --version` reports 22 or newer.
+
+The last turn of each Claude Code session missing, or `SessionEnd hook [...] failed: Hook cancelled` on
+exit: Claude Code stopped the hook before it sent that turn. Set
+`CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS` as above and restart Claude Code. The debug log then shows
+`Processed N turns` after the session ends, not only `Hook started`.
