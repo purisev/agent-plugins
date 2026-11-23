@@ -33,6 +33,8 @@ $NodeDist = "https://nodejs.org/dist/latest-$NodeLine.x"
 # Codex runs the Langfuse hook on this Node.js; the other hooks need $MinNodeMajor.
 $LangfuseCodexNodeMajor = 22
 $UvDist = 'https://github.com/astral-sh/uv/releases/latest/download'
+# How long Claude Code waits at exit for the Langfuse hook, which sends the session's last turn then.
+$SessionEndTimeoutMs = 15000
 $script:CodexInstalled = $false
 
 function Say([string]$Text) { Write-Host $Text }
@@ -496,6 +498,80 @@ fetch(`${url}/api/public/projects`, { headers: { Authorization: `Basic ${auth}` 
 '@
 }
 
+# The same text is in install.sh; install.test.mjs keeps the two equal.
+function Get-SessionEndTimeoutSetter {
+  return @'
+// Sets CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS under "env" in Claude Code's settings file, keeping
+// everything else in it. Without PURISEV_WRITE it only checks. Exits 0 when the value is (to be) set,
+// 3 when the file has one already, which it prints, and 1 when the file is not a JSON object.
+const fs = require("fs");
+const path = require("path");
+const { PURISEV_SETTINGS: file, PURISEV_TIMEOUT_MS: timeout, PURISEV_WRITE: write } = process.env;
+const name = "CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS";
+const isObject = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
+let settings = {};
+let mode = 0o600;
+try {
+  settings = JSON.parse(fs.readFileSync(file, "utf-8").replace(/^\uFEFF/, ""));
+  mode = fs.statSync(file).mode & 0o777;
+} catch (error) {
+  if (error.code !== "ENOENT") {
+    console.log(error.message);
+    process.exit(1);
+  }
+}
+if (!isObject(settings) || (settings.env !== undefined && !isObject(settings.env))) {
+  console.log(`${file} or its "env" is not a JSON object`);
+  process.exit(1);
+}
+if (settings.env?.[name] !== undefined) {
+  console.log(settings.env[name]);
+  process.exit(3);
+}
+if (write) {
+  settings.env = { ...settings.env, [name]: timeout };
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const temp = `${file}.${process.pid}.tmp`;
+  fs.writeFileSync(temp, `${JSON.stringify(settings, null, 2)}\n`, { mode });
+  fs.renameSync(temp, file);
+}
+'@
+}
+
+# Claude Code gives SessionEnd hooks a second and a half at exit unless told otherwise, and stops the
+# Langfuse hook before it sends the session's last turn.
+function Initialize-ClaudeSessionEnd([string[]]$Hosts) {
+  if ($Hosts -notcontains 'claude') { return }
+  $configDir = if ($env:CLAUDE_CONFIG_DIR) { $env:CLAUDE_CONFIG_DIR } else { Join-Path $HOME '.claude' }
+  $settings = Join-Path $configDir 'settings.json'
+  $name = 'CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS'
+  if ($env:CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS) { Say "  $name is set in this environment; leaving $settings as it is"; return }
+  $manual = "add `"env`": {`"$name`": `"$SessionEndTimeoutMs`"} to $settings, or Claude Code stops the Langfuse hook at exit and the last turn of each session never reaches Langfuse"
+  if ((Get-NodeMajor) -lt $MinNodeMajor) { Warn "$settings cannot be edited without node; $manual"; return }
+
+  $js = Join-Path ([IO.Path]::GetTempPath()) "purisev-sessionend-$PID.js"
+  [IO.File]::WriteAllText($js, (Get-SessionEndTimeoutSetter), (New-Object Text.UTF8Encoding $false))
+  $env:PURISEV_SETTINGS = $settings
+  try {
+    $found = (& node $js) -join ' '
+    $status = $LASTEXITCODE
+    if ($status -eq 3) { Say "  $settings sets $name to $found; leaving it as it is"; return }
+    if ($status -ne 0) { Warn "$settings cannot be read as JSON ($found); $manual"; return }
+    if (-not (Confirm-Step "Let Claude Code wait up to $($SessionEndTimeoutMs / 1000) s at exit for the Langfuse hook ($name in $settings)?")) {
+      Warn "not editing $settings; $manual"
+      return
+    }
+    if ($DryRun) { Say "  would set $name to $SessionEndTimeoutMs in $settings"; return }
+    $env:PURISEV_TIMEOUT_MS = "$SessionEndTimeoutMs"
+    $env:PURISEV_WRITE = '1'
+    & node $js | Out-Null
+    if ($LASTEXITCODE -eq 0) { Say "  set $name to $SessionEndTimeoutMs in $settings" } else { Warn "could not write $settings; $manual" }
+  } finally {
+    Remove-Item -LiteralPath $js -ErrorAction SilentlyContinue
+    Remove-Item env:PURISEV_SETTINGS, env:PURISEV_TIMEOUT_MS, env:PURISEV_WRITE -ErrorAction SilentlyContinue
+  }
+}
+
 function Test-CodexHook([string[]]$Hosts) {
   if ($Hosts -notcontains 'codex') { return }
   $features = @(& codex features list 2>$null)
@@ -520,6 +596,7 @@ function Write-PrivateFile([string]$Path, [string]$Text) {
 function Initialize-Langfuse([string[]]$Plugins, [string[]]$Hosts) {
   if ($Plugins -notcontains $LangfusePlugin) { return }
   Step 'Langfuse'
+  Initialize-ClaudeSessionEnd $Hosts
   Test-CodexHook $Hosts
   if ($NoConfig) { return }
 
