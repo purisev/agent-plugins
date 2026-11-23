@@ -21,6 +21,8 @@ NODE_DIST="https://nodejs.org/dist/latest-${NODE_LINE}.x"
 # Codex runs the Langfuse hook on this Node.js; the other hooks need MIN_NODE_MAJOR.
 LANGFUSE_CODEX_NODE_MAJOR=22
 UV_DIST="https://github.com/astral-sh/uv/releases/latest/download"
+# How long Claude Code waits at exit for the Langfuse hook, which sends the session's last turn then.
+SESSIONEND_TIMEOUT_MS=15000
 
 ASSUME_YES=0
 DRY_RUN=0
@@ -683,6 +685,83 @@ fetch(`${url}/api/public/projects`, { headers: { Authorization: `Basic ${auth}` 
 JS
 }
 
+# The same text is in install.ps1; install.test.mjs keeps the two equal.
+sessionend_timeout_js() {
+  cat <<'JS'
+// Sets CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS under "env" in Claude Code's settings file, keeping
+// everything else in it. Without PURISEV_WRITE it only checks. Exits 0 when the value is (to be) set,
+// 3 when the file has one already, which it prints, and 1 when the file is not a JSON object.
+const fs = require("fs");
+const path = require("path");
+const { PURISEV_SETTINGS: file, PURISEV_TIMEOUT_MS: timeout, PURISEV_WRITE: write } = process.env;
+const name = "CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS";
+const isObject = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
+let settings = {};
+let mode = 0o600;
+try {
+  settings = JSON.parse(fs.readFileSync(file, "utf-8").replace(/^\uFEFF/, ""));
+  mode = fs.statSync(file).mode & 0o777;
+} catch (error) {
+  if (error.code !== "ENOENT") {
+    console.log(error.message);
+    process.exit(1);
+  }
+}
+if (!isObject(settings) || (settings.env !== undefined && !isObject(settings.env))) {
+  console.log(`${file} or its "env" is not a JSON object`);
+  process.exit(1);
+}
+if (settings.env?.[name] !== undefined) {
+  console.log(settings.env[name]);
+  process.exit(3);
+}
+if (write) {
+  settings.env = { ...settings.env, [name]: timeout };
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const temp = `${file}.${process.pid}.tmp`;
+  fs.writeFileSync(temp, `${JSON.stringify(settings, null, 2)}\n`, { mode });
+  fs.renameSync(temp, file);
+}
+JS
+}
+
+# Claude Code gives SessionEnd hooks a second and a half at exit unless told otherwise, and stops the
+# Langfuse hook before it sends the session's last turn.
+claude_sessionend_timeout() {
+  on_host claude || return 0
+  settings="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/settings.json"
+  name=CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS
+  if [ -n "${CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS:-}" ]; then
+    say "  $name is set in this environment; leaving $settings as it is"
+    return 0
+  fi
+  manual="add \"env\": {\"$name\": \"$SESSIONEND_TIMEOUT_MS\"} to $settings, or Claude Code stops the Langfuse hook at exit and the last turn of each session never reaches Langfuse"
+  if ! node_is_usable; then
+    warn "$settings cannot be edited without node; $manual"
+    return 0
+  fi
+  status=0
+  found=$(PURISEV_SETTINGS="$settings" node -e "$(sessionend_timeout_js)") || status=$?
+  case "$status" in
+    0) ;;
+    3) say "  $settings sets $name to $found; leaving it as it is"; return 0 ;;
+    *) warn "$settings cannot be read as JSON ($found); $manual"; return 0 ;;
+  esac
+  if ! confirm "Let Claude Code wait up to $((SESSIONEND_TIMEOUT_MS / 1000)) s at exit for the Langfuse hook ($name in $settings)?"; then
+    warn "not editing $settings; $manual"
+    return 0
+  fi
+  if [ "$DRY_RUN" -eq 1 ]; then
+    say "  would set $name to $SESSIONEND_TIMEOUT_MS in $settings"
+    return 0
+  fi
+  if PURISEV_SETTINGS="$settings" PURISEV_TIMEOUT_MS="$SESSIONEND_TIMEOUT_MS" PURISEV_WRITE=1 node -e "$(sessionend_timeout_js)" >/dev/null; then
+    say "  set $name to $SESSIONEND_TIMEOUT_MS in $settings"
+  else
+    warn "could not write $settings; $manual"
+  fi
+}
+
 check_codex_hooks() {
   on_host codex || return 0
   if codex features list 2>/dev/null | grep -q '^hooks[[:space:]].*[[:space:]]false$'; then
@@ -716,6 +795,7 @@ save_langfuse_keys() {
 setup_langfuse() {
   case " $PLUGINS " in *" $LANGFUSE_PLUGIN "*) ;; *) return 0 ;; esac
   step "Langfuse"
+  claude_sessionend_timeout
   check_codex_hooks
   [ "$CONFIGURE" -eq 1 ] || return 0
 
